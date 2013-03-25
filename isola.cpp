@@ -11,12 +11,15 @@
 #include <stdio.h>      /* printf, fgets */
 #include <stdlib.h>     /* atoi */
 #include <assert.h>     /* assert */
+#include <sys/time.h>
 
 #include <iostream>		/* cin/cout */
 #include <bitset>		/* bitset */
 #include <string>		/* string */
 #include <queue>		/* priority queue */
 #include <limits>		/* min and max for types */
+#include <ctime>		/* for system time */
+#include <sstream>		/* stringstream */
 
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
@@ -45,6 +48,7 @@ static const char MY = 1;
 static const char OP = -1;
 //Keep Even?
 static const char MAXDEPTH = 7;
+static const char MAXSECS = 60;
 
 
 
@@ -76,10 +80,19 @@ bool play( BitBoard&, char*, char* );
 
 
 Node search_root(Node &);
-int alpha_beta(Node&, int, int, int, const char*);
+int alpha_beta(Node&, int, int, const char*, const timeval&, int);
 
 bool game_over(Node&);
+bool lookup(const BitBoard &board, int *hashValue);
+bool store(const BitBoard &board);
 
+
+string display_time( const timeval &tv );
+timeval split_time( const timeval &tv, char split);
+timeval add_time( const timeval &tv, const char *seconds);
+void add_time( timeval &to, const timeval &add);
+bool past_time(const timeval &cur, const timeval &end);
+timeval diff(const timeval &start, const timeval &end);
 
 
 class Node 
@@ -151,6 +164,12 @@ public:
 	}
 };
 
+
+
+
+
+
+
 struct by_max
 {
 	bool operator() (const Node& lhs, const Node& rhs)
@@ -182,6 +201,12 @@ struct by_closeness
 	}
 
 };
+
+
+
+
+
+
 
 int usage()
 {
@@ -250,105 +275,13 @@ bool valid_move( const BitBoard &board, const char *oldIdx,
 	return true;
 }
 
-
-
-
-
-char find_moves(const Node &node, 
-				vector<Node> &children,
-				const char *dir,
-				const char *player )
+bool game_over(Node &node)
 {
-	// cout << "fastm:" <<endl;
-	char fromIdx = (*player == MY) ? node.myIdx : node.opIdx;
-	char curIdx = fromIdx + *dir, n = 0;
-
-	while ( valid_move( node.board, &fromIdx, &curIdx ) )
-	{
-
-		if( (curIdx % ROWSIZE == 7 && 
-				(*dir == NWEST || *dir == WEST || *dir == SWEST))
-			|| (curIdx % ROWSIZE == 0 && 
-				(*dir == NEAST || *dir == EAST || *dir == SEAST)))
-			break; //edge of table reached
-
-		Node child;
-		if(*player == MY)
-			child = Node(node.board, &curIdx, &node.opIdx);
-		else
-			child = Node(node.board, &node.myIdx, &curIdx);
-
-		child.evaluate();
-		children.push_back(child);
-		n++;
-		curIdx += *dir;
-	}
-
-	return n;
-}
-
-char get_children( const Node &node, 
-				vector<Node> &children,
-				const char *player )
-{
-	// cout << "getc:" <<endl;
-	// number of children found
-	char n = 0;
-
-	n += find_moves(node, children, &NORTH, player);
-	n += find_moves(node, children, &SOUTH, player);
-	n += find_moves(node, children, &EAST, player);
-	n += find_moves(node, children, &WEST, player);
-	n += find_moves(node, children, &NWEST, player);
-	n += find_moves(node, children, &NEAST, player);
-	n += find_moves(node, children, &SWEST, player);
-	n += find_moves(node, children, &SEAST, player);
-
-	return n;
-}
-
-
-
-
-
-char fast_moves(const Node &node, const char *dir, const char *player)
-{
-	// cout << "fastm:" <<endl;
-	char fromIdx = (*player == MY) ? node.myIdx : node.opIdx;
-	char curIdx = fromIdx + *dir, n = 0;
-
-	while ( valid_move( node.board, &fromIdx, &curIdx ) )
-	{
-
-		if( (curIdx % ROWSIZE == 7 && 
-				(*dir == NWEST || *dir == WEST || *dir == SWEST))
-			|| (curIdx % ROWSIZE == 0 && 
-				(*dir == NEAST || *dir == EAST || *dir == SEAST)))
-			break; //edge of table reached
-
-		n++;
-		curIdx += *dir;
-	}
-
-	return n;
-}
-
-char fast_children(const Node &node, const char *player)
-{
-	// cout << "fastc:" <<endl;
-	// number of children found
-	char n = 0;
-
-	n += fast_moves(node, &NORTH, player);
-	n += fast_moves(node, &SOUTH, player);
-	n += fast_moves(node, &EAST, player);
-	n += fast_moves(node, &WEST, player);
-	n += fast_moves(node, &NWEST, player);
-	n += fast_moves(node, &NEAST, player);
-	n += fast_moves(node, &SWEST, player);
-	n += fast_moves(node, &SEAST, player);
-
-	return n;
+	if(node.evaluate() >= numeric_limits<int>::max()-20 
+			|| node.evaluate() <= numeric_limits<int>::min() + 20)
+		return true;
+	else
+		return false;
 }
 
 // Draws a Isola board represented by a bitset, when supplied
@@ -412,6 +345,110 @@ int draw_board(const Node &node)
 	return 0;
 }
 
+
+
+
+char find_moves(const Node &node, 
+				vector<Node> &children,
+				const char *dir,
+				const char *player )
+{
+	// cout << "fastm:" <<endl;
+	char fromIdx = (*player == MY) ? node.myIdx : node.opIdx;
+	char curIdx = fromIdx + *dir, n = 0;
+
+	while ( valid_move( node.board, &fromIdx, &curIdx ) )
+	{
+
+		if( (curIdx % ROWSIZE == 7 && 
+				(*dir == NWEST || *dir == WEST || *dir == SWEST))
+			|| (curIdx % ROWSIZE == 0 && 
+				(*dir == NEAST || *dir == EAST || *dir == SEAST)))
+			break; //edge of table reached
+
+		Node child;
+		if(*player == MY)
+			child = Node(node.board, &curIdx, &node.opIdx);
+		else
+			child = Node(node.board, &node.myIdx, &curIdx);
+
+		child.evaluate();
+		children.push_back(child);
+		n++;
+		curIdx += *dir;
+	}
+
+	return n;
+}
+
+char get_children( const Node &node, 
+				vector<Node> &children,
+				const char *player )
+{
+	// cout << "getc:" <<endl;
+	// number of children found
+	char n = 0;
+
+	n += find_moves(node, children, &NORTH, player);
+	n += find_moves(node, children, &SOUTH, player);
+	n += find_moves(node, children, &EAST, player);
+	n += find_moves(node, children, &WEST, player);
+	n += find_moves(node, children, &NWEST, player);
+	n += find_moves(node, children, &NEAST, player);
+	n += find_moves(node, children, &SWEST, player);
+	n += find_moves(node, children, &SEAST, player);
+
+	return n;
+}
+
+
+char fast_moves(const Node &node, const char *dir, const char *player)
+{
+	// cout << "fastm:" <<endl;
+	char fromIdx = (*player == MY) ? node.myIdx : node.opIdx;
+	char curIdx = fromIdx + *dir, n = 0;
+
+	while ( valid_move( node.board, &fromIdx, &curIdx ) )
+	{
+
+		if( (curIdx % ROWSIZE == 7 && 
+				(*dir == NWEST || *dir == WEST || *dir == SWEST))
+			|| (curIdx % ROWSIZE == 0 && 
+				(*dir == NEAST || *dir == EAST || *dir == SEAST)))
+			break; //edge of table reached
+
+		n++;
+		curIdx += *dir;
+	}
+
+	return n;
+}
+
+char fast_children(const Node &node, const char *player)
+{
+	// cout << "fastc:" <<endl;
+	// number of children found
+	char n = 0;
+
+	n += fast_moves(node, &NORTH, player);
+	n += fast_moves(node, &SOUTH, player);
+	n += fast_moves(node, &EAST, player);
+	n += fast_moves(node, &WEST, player);
+	n += fast_moves(node, &NWEST, player);
+	n += fast_moves(node, &NEAST, player);
+	n += fast_moves(node, &SWEST, player);
+	n += fast_moves(node, &SEAST, player);
+
+	return n;
+}
+
+
+
+
+
+
+
+
 bool take_move( BitBoard &board, char *oldIdx )
 {
 	// cout << "take:" <<endl;
@@ -452,7 +489,6 @@ bool take_move( BitBoard &board, char *oldIdx )
 	return true;
 }
 
-
 bool play( const Node &initNode )
 {
 	// cout << "play:" <<endl;
@@ -479,40 +515,134 @@ bool play( const Node &initNode )
 	return false;
 }
 
+
+
+
+timeval diff(const timeval &start, const timeval &end)
+{
+	timeval temp;
+	if ((end.tv_usec-start.tv_usec)<0) {
+		temp.tv_sec = end.tv_sec-start.tv_sec-1;
+		temp.tv_usec = 1000000+end.tv_usec-start.tv_usec;
+	} else {
+		temp.tv_sec = end.tv_sec-start.tv_sec;
+		temp.tv_usec = end.tv_usec-start.tv_usec;
+	}
+	return temp;
+}
+
+bool past_time(const timeval &cur, const timeval &end)
+{
+	timeval tmp = diff(cur, end);
+	long t = tmp.tv_sec*1000000 + tmp.tv_usec;
+	// cerr << t << "\tcur: " << display_time(cur) << "\tend: " 
+	// 				<< display_time(end) <<"\ttmp: " << display_time(tmp) <<endl;
+	return t <= 0;
+}
+
+timeval add_time( const timeval &tv, const char *seconds)
+{
+	timeval temp;
+	temp.tv_sec = tv.tv_sec + *seconds;
+	return temp;
+}
+
+void add_time( timeval &to, const timeval &add)
+{
+	to.tv_sec += add.tv_sec;
+	to.tv_usec += add.tv_usec;
+	if( to.tv_usec >= 1000000)
+	{
+		to.tv_usec -= 1000000;
+		to.tv_sec++;
+	}
+}
+
+timeval split_time( const timeval &tv, char split)
+{
+	timeval tmp;
+	long usecs = ((tv.tv_sec*1000000) + tv.tv_usec) / split;
+	tmp.tv_sec = usecs / 1000000;
+	tmp.tv_usec = usecs % 1000000;
+	return tmp;
+}
+
+string display_time( const timeval &tv )
+{
+	std::string number;
+	std::stringstream strstream;
+	strstream << tv.tv_sec << "." << tv.tv_usec << " seconds";
+	strstream >> number;
+	return number;
+}
+
+
+
+
 Node search_root(Node &initNode)
 {
+	// set time limit
+	timeval begin, end, tv, tmp;
+	gettimeofday(&begin, NULL);
+	end = add_time(begin, &MAXSECS);
 
 	int alpha = numeric_limits<int>::min() + 10;
 	int beta = numeric_limits<int>::max() - 10;
 
 	vector<Node> children;
-	int count = get_children(initNode, children, &MY);
-	int i = 0, lastValue, bestValue = alpha, bestIdx =0;
-	for (; i < count; i++)
+	int numKids = get_children(initNode, children, &MY);
+	random_shuffle(children.begin(),children.end());
+
+	int i = 0, value, bestValue = alpha, bestIdx =0;
+	for (; i < numKids; i++)
 	{
-		lastValue = -1 * alpha_beta(children[i], -1*beta, -1*alpha,
-									 MAXDEPTH-1, &OP);
-		if (lastValue > bestValue)
+		gettimeofday(&tv, NULL);
+		tmp = split_time( diff(tv, end), numKids - i);
+		add_time(tv, tmp );
+		cerr << "split: " << display_time( tmp ) << endl;
+
+		value = -1 * alpha_beta(children[i], -1*beta, -1*alpha,	&OP, tv, 1);
+		if (value > bestValue)
 		{
-			bestValue = lastValue;
+			bestValue = value;
 			bestIdx = i;
 		}
-		cerr << "last: " << lastValue << "/" << (int)children[i].myIdx <<
-				"\t\tbest: " << bestValue << "/" << (int)children[bestIdx].myIdx
-				<< endl<< endl<< endl;
+
+		// if( value > alpha)
+		// 	alpha = value;
+
+		cerr << "last: " << value 
+				<< "  pos: " << GETX((int)children[i].myIdx) << ","
+							<< GETY((int)children[i].myIdx)
+				<<"\t\tbest: " << bestValue 
+				<< "  pos: " << GETX((int)children[bestIdx].myIdx) << ","
+							<< GETY((int)children[bestIdx].myIdx)
+				<< endl;
+
+		gettimeofday(&tv, NULL);
+		cerr << "time: " << display_time( diff(begin, tv)) << endl <<endl;
+		if (past_time(tv, end))
+			break;
 	}
 
+	gettimeofday(&tv, NULL);
+	cerr << "completed in: " << display_time( diff(begin, tv)) << endl<< endl<< endl;
 	return children[bestIdx];
 
 }
 
-int alpha_beta(Node &node, int alpha, int beta, int depth, const char *player)
+int alpha_beta(Node &node, int alpha, int beta, const char *player,
+				const timeval &end, int depth)
 {
-	// for(int idx = 1; idx < MAXDEPTH-depth; idx++)
-	// 	cerr << "\t";
-	// cerr << "d:" << depth << "\t" << node << "\t";
+	// for(int i = 1; i <= depth; i += 3)
+	// 	cerr << " ";
+	// cerr << "d:" << depth << "\t" << node << "\t\n\tend: " << display_time(end) << "\n";
 
-	if(depth == 0 || game_over(node))
+
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+
+	if(game_over(node) || past_time(tv, end) )
 	{
 		// cerr << "\t\tleafNode:\t" << node<< endl;
 		return node.evaluate() * *player;
@@ -523,42 +653,37 @@ int alpha_beta(Node &node, int alpha, int beta, int depth, const char *player)
 	vector<Node> children;
 	char numKids = get_children(node, children, player);
 
-	// sort(children.begin(), children.end(), by_max);
-	random_shuffle(children.begin(),children.end());
+	sort(children.begin(), children.end(), by_max());
+	// random_shuffle(children.begin(),children.end());
 
-	int idx = 0, score = numeric_limits<int>::min() +10, result, bestIdx = -1;
-	for ( ; idx < numKids; idx++)
+	int i = 0, value = numeric_limits<int>::min() +10;
+	for ( ; i < numKids; i++)
 	{
-		result = -1*(alpha_beta(children[idx],-1 * beta, -1 * alpha,
-								 depth -1, (*player == MY) ? &OP : &MY));
+		gettimeofday(&tv, NULL);
+		add_time(tv, split_time( diff(tv, end), numKids - i));
+
+		value = MAX(value, 
+						-1*(alpha_beta(children[i],-1 * beta, -1 * alpha,
+							(*player == MY) ? &OP : &MY, tv, depth + 1)));
 		// cerr << "\t\tresult: " << result <<endl;
 
-		if(result > score)
+		if( value >= beta)
 		{
-			score = result;
-		}
-
-		if( score >= beta)
-		{
-			bestIdx = idx;
 			return beta;
 		}
 
-		if( score > alpha)
-			alpha = score;
+		if( value > alpha)
+			alpha = value;
 	}
 	// cerr << "alpha:\t" << alpha << endl;
 	return alpha;
 }
 
-bool game_over(Node &node)
-{
-	if(node.evaluate() >= numeric_limits<int>::max()-20 
-			|| node.evaluate() <= numeric_limits<int>::min() + 20)
-		return true;
-	else
-		return false;
-}
+
+
+
+
+
 
 
 
