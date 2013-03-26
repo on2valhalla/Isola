@@ -8,18 +8,20 @@
  */
 
 
-#include <stdio.h>      /* printf, fgets */
-#include <stdlib.h>     /* atoi */
-#include <assert.h>     /* assert */
-#include <sys/time.h>
-
-#include <iostream>		/* cin/cout */
-#include <bitset>		/* bitset */
-#include <string>		/* string */
-#include <queue>		/* priority queue */
-#include <limits>		/* min and max for types */
-#include <ctime>		/* for system time */
-#include <sstream>		/* stringstream */
+#include <stdio.h>      				/* printf, fgets */
+#include <stdlib.h>     				/* atoi */
+#include <assert.h>     				/* assert */
+#include <sys/time.h>				
+				
+#include <iostream>						/* cin/cout */
+#include <bitset>						/* bitset */
+#include <string>						/* string */
+#include <queue>						/* priority queue */
+#include <limits>						/* min and max for types */
+#include <ctime>						/* for system time */
+#include <sstream>						/* stringstream */
+#include <sparsehash/dense_hash_map> 	/* google hash map */
+#include <tr1/functional>
 
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
@@ -33,6 +35,9 @@
 
 
 using namespace std;
+using google::dense_hash_map;
+using tr1::hash;  // or __gnu_cxx::hash, or maybe tr1::hash, depending on your OS
+
 
 static const char ROWSIZE = 8;
 static const char BOARDSIZE = ROWSIZE * ROWSIZE;
@@ -49,14 +54,21 @@ static const char OP = -1;
 //Keep Even?
 static const char MAXDEPTH = 7;
 static const char MAXSECS = 60;
+static const int MAX = numeric_limits<int>::max() - 10;
+static const int MIN = numeric_limits<int>::min() + 10;
+
+
 
 
 
 typedef bitset<BOARDSIZE> BitBoard;
 
 class Node;
+struct IsolaState;
 struct by_max;
 struct by_min;
+struct by_closeness;
+struct eq_state;
 
 int usage();
 bool fail(string);
@@ -93,6 +105,8 @@ timeval add_time( const timeval &tv, const char *seconds);
 void add_time( timeval &to, const timeval &add);
 bool past_time(const timeval &cur, const timeval &end);
 timeval diff(const timeval &start, const timeval &end);
+
+
 
 
 class Node 
@@ -140,7 +154,7 @@ public:
 			int myMoves = fast_children(*this, &MY);
 			heuristic = (opMoves == 0) ? numeric_limits<int>::max() - 10:
 						(myMoves == 0) ? numeric_limits<int>::min() + 10:
-						(myMoves - opMoves*2 + 50) * board.count();
+						(myMoves - opMoves*4 + 100) * board.count();
 			eval = true;
 		}
 		return heuristic;
@@ -163,6 +177,45 @@ public:
 		return o;
 	}
 };
+
+struct IsolaState
+{
+	BitBoard board;
+	char myIdx;
+	char opIdx;
+};
+
+
+
+struct eq_state
+{
+  bool operator()(const IsolaState* s1, const IsolaState* s2) const
+  {
+	return (s1->board == s2->board) && (s1->myIdx == s2->myIdx)
+						&& (s1->opIdx == s2->opIdx);
+  }
+};
+
+
+template<class T> class MyHash;
+ 
+template<>
+class MyHash<IsolaState> {
+public:
+    size_t operator()(const IsolaState &s) const 
+    {
+    	tr1::hash<bitset<BOARDSIZE> > bHash;
+		size_t hash = bHash(s.board);
+		hash ^= hash<char>()(s.myIdx) 
+				+ 0x9e3779b9 + (hash << 6) + (hash >> 2);
+		hash ^= hash<char>()(s.opIdx) 
+				+ 0x9e3779b9 + (hash << 6) + (hash >> 2);
+		return hash;
+    }
+};
+
+dense_hash_map< IsolaState, int, hash< IsolaState >, eq_state> trans;
+
 
 
 
@@ -201,6 +254,7 @@ struct by_closeness
 	}
 
 };
+
 
 
 
@@ -591,25 +645,27 @@ Node search_root(Node &initNode)
 
 	vector<Node> children;
 	int numKids = get_children(initNode, children, &MY);
-	random_shuffle(children.begin(),children.end());
+	sort(children.begin(), children.end(), by_max());
+	// random_shuffle(children.begin(),children.end());
 
 	int i = 0, value, bestValue = alpha, bestIdx =0;
 	for (; i < numKids; i++)
 	{
 		gettimeofday(&tv, NULL);
 		tmp = split_time( diff(tv, end), numKids - i);
+		if (i < numKids / 2)
+			add_time(tmp, tmp);
 		add_time(tv, tmp );
 		cerr << "split: " << display_time( tmp ) << endl;
 
 		value = -1 * alpha_beta(children[i], -1*beta, -1*alpha,	&OP, tv, 1);
+
+
 		if (value > bestValue)
 		{
 			bestValue = value;
 			bestIdx = i;
 		}
-
-		// if( value > alpha)
-		// 	alpha = value;
 
 		cerr << "last: " << value 
 				<< "  pos: " << GETX((int)children[i].myIdx) << ","
@@ -618,6 +674,10 @@ Node search_root(Node &initNode)
 				<< "  pos: " << GETX((int)children[bestIdx].myIdx) << ","
 							<< GETY((int)children[bestIdx].myIdx)
 				<< endl;
+
+		if( value > alpha)
+			alpha = value;
+
 
 		gettimeofday(&tv, NULL);
 		cerr << "time: " << display_time( diff(begin, tv)) << endl <<endl;
@@ -635,14 +695,14 @@ int alpha_beta(Node &node, int alpha, int beta, const char *player,
 				const timeval &end, int depth)
 {
 	// for(int i = 1; i <= depth; i += 3)
-	// 	cerr << " ";
-	// cerr << "d:" << depth << "\t" << node << "\t\n\tend: " << display_time(end) << "\n";
+	// 	cerr << "\t";
+	// cerr << "d:" << depth << "\t" << node.evaluate() * *player << "\n";
 
 
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 
-	if(game_over(node) || past_time(tv, end) )
+	if(game_over(node) || (past_time(tv, end) && *player == -1))
 	{
 		// cerr << "\t\tleafNode:\t" << node<< endl;
 		return node.evaluate() * *player;
@@ -680,10 +740,104 @@ int alpha_beta(Node &node, int alpha, int beta, const char *player,
 }
 
 
+int evaluate(const state &st)
+{
 
+}
 
+state transpoSearch(state &root)
+{
 
+	// set time limit
+	timeval begin, end, tv, tmp;
+	gettimeofday(&begin, NULL);
+	end = add_time(begin, &MAXSECS);
 
+	int depth = 4;
+
+	// vector<Node> children;
+	// get_children(initNode, children, &MY);
+	// sort(children.begin(), children.end(), by_max());
+
+	state best;
+
+	for(int d = 1; d < depth; d++)
+	{
+		best = alpha_beta_memory(root, d, end);
+	}
+}
+
+state alpha_beta_memory(const state &root, const char &depth, const &timeval end)
+{
+	int alpha = MIN;
+	int beta = MAX;
+
+	vector<Node> children;
+	int numKids = get_children(initNode, children, &MY);
+	sort(children.begin(), children.end(), by_max());
+
+	int i = 0, value, bestValue = alpha, bestIdx =0;
+	for (; i < numKids; i++)
+	{
+		value = -1 * a_b(children[i], -1*beta, -1*alpha, depth -1, OP, end);
+
+		if (value > bestValue)
+		{
+			bestValue = value;
+			bestIdx = i;
+		}
+
+		cerr << "last: " << value 
+				<< "  pos: " << GETX((int)children[i].myIdx) << ","
+							<< GETY((int)children[i].myIdx)
+				<<"\t\tbest: " << bestValue 
+				<< "  pos: " << GETX((int)children[bestIdx].myIdx) << ","
+							<< GETY((int)children[bestIdx].myIdx)
+				<< endl;
+
+		if( value > alpha)
+			alpha = value;
+	}
+
+	return children[bestIdx];
+}
+
+int a_b(const state &s, const int &alpha, const int &beta, const char &depth,
+			const char &player, const timeval &end)
+{
+	if(trans[s])
+		return trans[s] * player;
+
+	trans[s] = evaluate(s);
+
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	if(past_time(tv, end))
+		throw "ran out of time";
+
+	if(depth == 0 || game_over(s))
+		return trans[s] * player;
+
+	vector<Node> children;
+	char numKids = get_children(s, children, player);
+	sort(children.begin(), children.end(), by_max());
+
+	int i = 0, value = MAX;
+	for ( ; i < numKids; i++)
+	{
+		value = MAX(value, 
+						-1*(a_b(children[i],-1 * beta, -1 * alpha,
+							(player == MY) ? OP : MY, tv, depth + 1)));
+
+		if( value >= beta)
+			return beta;
+
+		if( value > alpha)
+			alpha = value;
+	}
+
+	return alpha;
+}
 
 
 
@@ -739,6 +893,9 @@ int main(int argc, char *argv[])
 
 	Node initNode (board, &myIdx, &opIdx);
 	draw_board(initNode);
+
+
+	trans.set_empty_key(NULL);
 
 	bool win = play(initNode);
 
