@@ -36,25 +36,27 @@
 
 using namespace std;
 
-static const char ROWSIZE = 8;
+
+
+static const char ROWSIZE = 5;
 static const char BOARDSIZE = ROWSIZE * ROWSIZE;
 static const char	NEAST = -ROWSIZE + 1,
-					NORTH = -ROWSIZE,
-					NWEST = -ROWSIZE - 1,
-					WEST = -1,
-					EAST = 1,
-					SWEST = ROWSIZE - 1,
-					SOUTH = ROWSIZE,
-					SEAST = ROWSIZE + 1;
+NORTH = -ROWSIZE,
+NWEST = -ROWSIZE - 1,
+WEST = -1,
+EAST = 1,
+SWEST = ROWSIZE - 1,
+SOUTH = ROWSIZE,
+SEAST = ROWSIZE + 1;
 
 static const char DIRECTIONS[] = { NWEST,
-									WEST,
-									SWEST,
-									NEAST,
-									EAST,
-									SEAST,
-									NORTH,
-									SOUTH};
+	WEST,
+	SWEST,
+	NEAST,
+	EAST,
+	SEAST,
+	NORTH,
+	SOUTH};
 
 static const char MY = 1;
 static const char OP = -1;
@@ -65,15 +67,18 @@ static const int MININT = numeric_limits<int>::min() + 40;
 static const int MAXINT = numeric_limits<int>::max() - 40;
 static const char CONNCOMPLIMIT = ROWSIZE * ROWSIZE / 3;
 static const int CLOSEDCOMPONENT = MAXINT / 64;
-string me, op;
-bool endgame = false;
-
 
 
 typedef bitset<BOARDSIZE> BitBoard;
-
 class Node;
 struct by_max;
+
+
+string me, op;
+bool opWithMe;
+vector<Node> moves;
+
+
 int evaluate_node( const Node &node );
 
 int usage();
@@ -205,8 +210,7 @@ struct by_closeness
 int connect_comp( const Node &node, bool &opWithMe, const char &player)
 {
 	char pos, newPos,
-	myIdx = (player == MY) ? node.myIdx : node.opIdx,
-	opIdx = (player == MY) ? node.opIdx : node.myIdx;
+	myIdx = (player == MY) ? node.myIdx : node.opIdx;
 	int n = 0, i = 0;
 	vector<char> h;
 	unordered_map<char, bool> m;
@@ -226,8 +230,6 @@ int connect_comp( const Node &node, bool &opWithMe, const char &player)
 			
 			m[newPos] = true;
 			
-			if (newPos == opIdx)
-				opWithMe = true;
 			if( !node.board[newPos])
 			{
 				h.push_back(newPos); push_heap(h.begin(),h.end());
@@ -287,14 +289,15 @@ int evaluate_node( const Node &node )
 	{
 		const_cast<Node&>(node).eval = true;
 		
-		if (node.board.count() > CONNCOMPLIMIT && !endgame)
+		if (node.board.count() > CONNCOMPLIMIT)
 		{
-			bool opWithMe = op_same_comp(node);
+			if (!opWithMe)
+				opWithMe = op_same_comp(node);
 			if (!opWithMe)
 			{
 				int mySpace = connect_comp(node, opWithMe, MY);
 				int opSpace = connect_comp(node, opWithMe, OP);
-//				draw_board(node);
+				
 				return const_cast<Node &>(node).heuristic =
 					(opSpace == 0) ? MAXINT + mySpace:
 					(mySpace == 0) ? MININT + mySpace:
@@ -334,6 +337,13 @@ bool game_over(const Node &node)
 		return true;
 	else
 		return false;
+}
+
+Node undo_last()
+{
+	Node prevNode = moves.back();
+	moves.pop_back();
+	return prevNode;
 }
 
 
@@ -449,7 +459,7 @@ int draw_board(const Node &node)
 	// cout << "draw:" <<endl;
 	
 	char i, j, idx;
-	cout << "   |";
+	cout << "\n\n   |";
 	for ( i = 1; i <= ROWSIZE; i++ )
 		cout << " " << (int)i << " |";
 	cout<< endl <<"___";
@@ -628,6 +638,19 @@ bool take_move( Node &node )
 		cout << "Please enter a move (X Y):  ";
 		getline(cin, move);
 		
+		size_t undo = move.find_first_of("$");
+		if (undo != string::npos)
+		{
+			Node prevNode = undo_last();
+			node.board = prevNode.board;
+			node.myIdx = prevNode.myIdx;
+			node.opIdx = prevNode.opIdx;
+			node.heuristic = prevNode.heuristic;
+			node.eval = node.eval;
+			draw_board(node);
+			continue;
+		}
+		
 		size_t y = move.find_first_of("12345678");
 		size_t x = move.find_first_of("12345678", y+1);
 		if (x == string::npos || y == string::npos)
@@ -644,12 +667,13 @@ bool take_move( Node &node )
 			continue;
 		}
 		
+		moves.push_back(node);
+		node.opIdx = newIdx;
+		node.board.set(newIdx, 1);
 		break;
 	}
 	
 	// success
-	node.opIdx = newIdx;
-	node.board.set(newIdx, 1);
 	n = fast_children(node, &OP);
 	if(n == 0)
 		return false;
@@ -657,57 +681,6 @@ bool take_move( Node &node )
 }
 
 
-
-
-bool play( Node &initNode )
-{
-	// cout << "play:" <<endl;
-	Node curNode = initNode;
-	curNode.evaluate();
-	int alpha = MININT;
-	
-	cout << "\n\n";
-	draw_board(curNode);
-	cout << "\n\n";
-	
-	while( fast_children(curNode, &MY) > 0)
-	{
-		// cout << "playloop:" <<endl;
-		cout <<"before "<< curNode << "\t" <<endgame <<endl;
-		bool opWithMe = false;
-		cout << connect_comp(curNode, opWithMe, MY) << " " << opWithMe
-				<< endl<< endl<< endl;
-//		alpha = MININT;
-		
-//		if(!endgame)
-			curNode = search_root(curNode, alpha);
-//		else
-//		{
-//			cerr << "isolated" << endl;
-//			curNode = isolated_move(curNode);
-//		}
-//		if(evaluate_node(curNode) == CLOSEDCOMPONENT
-//		   || evaluate_node(curNode) == -1 * CLOSEDCOMPONENT)
-//			endgame = true;
-		
-		if(evaluate_node(curNode) == MININT)
-			return false;
-		cerr << endl << curNode <<endl <<"endgame: " << endgame <<endl;
-		
-		cout << "\n\n";
-		draw_board(curNode);
-		cout << "\n\n";
-		
-		if( !take_move(curNode))
-			return true;
-		
-		cout << "\n\n";
-		draw_board(curNode);
-		cout << "\n\n";
-	}
-	
-	return false;
-}
 
 
 Node search_root(Node &initNode, int &alpha)
@@ -856,6 +829,49 @@ int alpha_beta(Node &node, int alpha, int beta, const char *player,
 
 
 
+bool play( Node &curNode )
+{
+	// cout << "play:" <<endl;
+	curNode.evaluate();
+	int alpha = MININT;
+	
+	cout << "\n\n";
+	draw_board(curNode);
+	cout << "\n\n";
+	
+	while( fast_children(curNode, &MY) > 0)
+	{
+		// cout << "playloop:" <<endl;
+		cout <<"before "<< curNode << "\t" <<opWithMe <<endl;
+		cout << "opWithMe: " << opWithMe
+		<< endl;
+		
+		
+		curNode = search_root(curNode, alpha);
+		
+		cout << "\n\n";
+		draw_board(curNode);
+		cout << "\n\n";
+		
+		
+		if(evaluate_node(curNode) == MININT)
+			return false;
+		cerr << endl << curNode <<endl <<"opWithMe: " << opWithMe
+		<< endl<< endl<<endl;
+		
+		
+		if( !take_move(curNode))
+			return true;
+		
+		cout << "\n\n";
+		draw_board(curNode);
+		cout << "\n\n";
+	}
+	
+	return false;
+}
+
+
 
 int main(int argc, char *argv[])
 {
@@ -899,58 +915,63 @@ int main(int argc, char *argv[])
 		op = "*X*";
 	}
 
-	
-	
-	//TESTING/////////
-	
-	myIdx = TOIDX(6, 6);
-	opIdx = TOIDX(7, 6);
-	me = "*X*";
-	op = "*O*";
-	
-	board.set(myIdx, 1);
-	board.set(opIdx, 1);
-	board.set(TOIDX(0, 0), 1);
-	board.set(TOIDX(ROWSIZE-1, ROWSIZE-1), 1);
-	board.set(TOIDX(1, 4), 1);
-	board.set(TOIDX(1, 6), 1);
-	board.set(TOIDX(2, 2), 1);
-	board.set(TOIDX(2, 3), 1);
-	board.set(TOIDX(2, 4), 1);
-	board.set(TOIDX(2, 5), 1);
-	board.set(TOIDX(2, 6), 1);
-	board.set(TOIDX(2, 7), 1);
-	board.set(TOIDX(3, 1), 1);
-	board.set(TOIDX(3, 5), 1);
-	board.set(TOIDX(3, 6), 1);
-	board.set(TOIDX(3, 7), 1);
-	board.set(TOIDX(4, 2), 1);
-	board.set(TOIDX(4, 3), 1);
-	board.set(TOIDX(4, 6), 1);
-	board.set(TOIDX(5, 4), 1);
-	board.set(TOIDX(5, 5), 1);
-	board.set(TOIDX(6, 7), 1);
+//	
+//	
+//	//TESTING/////////
+//	
+//	myIdx = TOIDX(6, 6);
+//	opIdx = TOIDX(7, 6);
+//	me = "*X*";
+//	op = "*O*";
+//	
+//	board.set(myIdx, 1);
+//	board.set(opIdx, 1);
+//	board.set(TOIDX(0, 0), 1);
+//	board.set(TOIDX(ROWSIZE-1, ROWSIZE-1), 1);
+//	board.set(TOIDX(1, 4), 1);
+//	board.set(TOIDX(1, 6), 1);
+//	board.set(TOIDX(2, 2), 1);
+//	board.set(TOIDX(2, 3), 1);
+//	board.set(TOIDX(2, 4), 1);
+//	board.set(TOIDX(2, 5), 1);
+//	board.set(TOIDX(2, 6), 1);
+//	board.set(TOIDX(2, 7), 1);
+//	board.set(TOIDX(3, 1), 1);
+//	board.set(TOIDX(3, 5), 1);
+//	board.set(TOIDX(3, 6), 1);
+//	board.set(TOIDX(3, 7), 1);
+//	board.set(TOIDX(4, 2), 1);
+//	board.set(TOIDX(4, 3), 1);
+//	board.set(TOIDX(4, 6), 1);
+//	board.set(TOIDX(5, 4), 1);
+//	board.set(TOIDX(5, 5), 1);
+//	board.set(TOIDX(6, 7), 1);
 	
 	
 	Node initNode (board, &myIdx, &opIdx);
-//	draw_board(initNode);
-	bool opWithMe = false;
+	moves.push_back(initNode);
+	opWithMe = true;
 	
-	cout << connect_comp(initNode, opWithMe, MY) << " " << opWithMe << endl;
+//	cerr << connect_comp(initNode, opWithMe, MY) << " " << opWithMe << endl;
 	
 	
 	if(playerNum == 2)
 	{
+		draw_board(initNode);
 		take_move(initNode);
 	}
 	
 	
 	bool win = play(initNode);
 	
+	cout << "\n\n";
+	draw_board(initNode);
+	cout << "\n\n";
+	
 	if ( win )
-		cout << "I win" << endl;
+		cout << "!!!!!!!    I win    !!!!!!!!!" << endl;
 	else
-		cout << "You win" << endl;
+		cout << ":( :(  You win  :( :(" << endl;
 	
 	
 	
