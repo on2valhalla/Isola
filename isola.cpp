@@ -20,14 +20,16 @@
 #include <limits>		/* min and max for types */
 #include <ctime>		/* for system time */
 #include <sstream>		/* stringstream */
+#include <unordered_map> /* hash set */
+#include <algorithm>	/* heap functions */
 
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
-#define TOIDX(x,y) ((x) + ((y) * 8))
+#define TOIDX(y,x) ((x) + ((y) * ROWSIZE))
 #define SIGN(x) (((x) > 0) - ((x) < 0))
-#define GETX(idx) ((idx) % 8 + 1)
-#define GETY(idx) ((idx) / 8 + 1)
+#define GETX(idx) ((idx) % ROWSIZE + 1)
+#define GETY(idx) ((idx) / ROWSIZE + 1)
 
 
 
@@ -36,14 +38,14 @@ using namespace std;
 
 static const char ROWSIZE = 8;
 static const char BOARDSIZE = ROWSIZE * ROWSIZE;
-static const char	NEAST = -7,
-NORTH = -8,
-NWEST = -9,
-WEST = -1,
-EAST = 1,
-SWEST = 7,
-SOUTH = 8,
-SEAST = 9;
+static const char	NEAST = -ROWSIZE + 1,
+					NORTH = -ROWSIZE,
+					NWEST = -ROWSIZE - 1,
+					WEST = -1,
+					EAST = 1,
+					SWEST = ROWSIZE - 1,
+					SOUTH = ROWSIZE,
+					SEAST = ROWSIZE + 1;
 
 static const char DIRECTIONS[] = { NWEST,
 									WEST,
@@ -58,10 +60,13 @@ static const char MY = 1;
 static const char OP = -1;
 //Keep Even?
 static const char MAXDEPTH = 40;
-static const int MAXSECS = 20;
-static const int MININT = numeric_limits<int>::min() + 10;
-static const int MAXINT = numeric_limits<int>::max() - 10;
+static const int MAXSECS = 40;
+static const int MININT = numeric_limits<int>::min() + 40;
+static const int MAXINT = numeric_limits<int>::max() - 40;
+static const char CONNCOMPLIMIT = ROWSIZE * ROWSIZE / 3;
+static const int CLOSEDCOMPONENT = MAXINT / 64;
 string me, op;
+bool endgame = false;
 
 
 
@@ -69,23 +74,26 @@ typedef bitset<BOARDSIZE> BitBoard;
 
 class Node;
 struct by_max;
-struct by_min;
+int evaluate_node( const Node &node );
 
 int usage();
 bool fail(string);
+bool game_over(const Node&);
+bool lookup(const BitBoard &board, int *hashValue);
+bool store(const BitBoard &board);
 int draw_board(const Node&);
-int evaluate_node( const Node &node );
+bool valid_move( const BitBoard&, const char*, const char*);
 
 
-bool valid_move( const BitBoard&, const char*,
-				const char*);
+string display_time( const timeval &tv );
+timeval split_time( const timeval &tv, char split);
+timeval add_time( const timeval &tv, const int *seconds);
+void add_time( timeval &to, const timeval &add);
+bool past_time(const timeval &cur, const timeval &end);
+timeval diff(const timeval &start, const timeval &end);
 
 
 char get_children( const Node&,	vector<Node>&, const char* player);
-char find_moves(const Node&, vector<Node>&, const char*, const char* );
-
-
-char fast_moves(const Node&, const char*, const char*);
 char fast_children(const Node&, const char*);
 
 
@@ -96,17 +104,10 @@ bool play( Node& );
 Node search_root(Node &, int&);
 int alpha_beta(Node&, int, int, const char*, const timeval&, int);
 
-bool game_over(Node&);
-bool lookup(const BitBoard &board, int *hashValue);
-bool store(const BitBoard &board);
+Node isolated_move(const Node &node);
 
 
-string display_time( const timeval &tv );
-timeval split_time( const timeval &tv, char split);
-timeval add_time( const timeval &tv, const int *seconds);
-void add_time( timeval &to, const timeval &add);
-bool past_time(const timeval &cur, const timeval &end);
-timeval diff(const timeval &start, const timeval &end);
+
 
 
 class Node
@@ -147,26 +148,7 @@ public:
 	{
 		if(!eval)
 		{
-			int opMoves = fast_children(*this, &OP);
-			int myMoves = fast_children(*this, &MY);
-			heuristic = (opMoves == 0) ? numeric_limits<int>::max() - 10:
-							(myMoves == 0) ? numeric_limits<int>::min() + 10:
-							(myMoves - opMoves*3 + 60) * (int)board.count();
-			eval = true;
-		}
-		return heuristic;
-	}
-	
-	int evaluate() const
-	{
-		if (!eval)
-		{
-			int opMoves = fast_children(*this, &OP);
-			int myMoves = fast_children(*this, &MY);
-			const_cast<Node*>(this)->heuristic = (opMoves == 0) ? numeric_limits<int>::max() - 10:
-				(myMoves == 0) ? numeric_limits<int>::min() + 10:
-				(myMoves - opMoves*3 + 60) * (int)board.count();
-			const_cast<Node*>(this)->eval = true;
+			evaluate_node(*this);
 		}
 		return heuristic;
 	}
@@ -193,60 +175,140 @@ struct by_max
 	}
 	
 };
-
-int connect_comp( const Node &node, bool &opWithMe)
+struct by_closeness
 {
-	char pos, newPos;
-	int n = 0, i = 0;
-	vector<char> s;
-	s.push_back(node.myIdx);
-	
-	while (!s.empty())
+	bool operator() (const Node& lhs, const Node& rhs)
 	{
-		pos = s.back();
-		s.pop_back();
-		n++;
-		for (; i < sizeof(DIRECTIONS); i++)
+		char Lx = abs(GETX(lhs.myIdx) - GETX(lhs.opIdx));
+		char Ly = abs(GETX(lhs.myIdx) - GETX(lhs.opIdx));
+		
+		char Rx = abs(GETX(rhs.myIdx) - GETX(rhs.opIdx));
+		char Ry = abs(GETX(rhs.myIdx) - GETX(rhs.opIdx));
+		return (Lx + Ly) < (Rx + Ry);
+	}
+	bool operator() (const char& lhs, const char& rhs)
+	{
+		char Lx = abs(GETX(lhs) - GETX(lhs));
+		char Ly = abs(GETX(lhs) - GETX(lhs));
+		
+		char Rx = abs(GETX(rhs) - GETX(rhs));
+		char Ry = abs(GETX(rhs) - GETX(rhs));
+		return (Lx + Ly) < (Rx + Ry);
+	}
+	
+};
+
+
+
+
+
+int connect_comp( const Node &node, bool &opWithMe, const char &player)
+{
+	char pos, newPos,
+	myIdx = (player == MY) ? node.myIdx : node.opIdx,
+	opIdx = (player == MY) ? node.opIdx : node.myIdx;
+	int n = 0, i = 0;
+	vector<char> h;
+	unordered_map<char, bool> m;
+	
+	h.push_back(myIdx);
+	make_heap(h.begin(), h.end(), by_closeness());
+	
+	while (!h.empty())
+	{
+		pos = h.front();
+		pop_heap(h.begin(), h.end(), by_closeness()); h.pop_back();
+		for (i = 0; i < sizeof(DIRECTIONS); i++)
 		{
 			newPos = pos + DIRECTIONS[i];
-			if (newPos == node.opIdx)
+			if (m[newPos] || newPos < 0 || newPos >= BOARDSIZE)
+				continue;
+			
+			m[newPos] = true;
+			
+			if (newPos == opIdx)
 				opWithMe = true;
 			if( !node.board[newPos])
-				s.push_back(newPos);
+			{
+				h.push_back(newPos); push_heap(h.begin(),h.end());
+				n++;
+			}
 		}
+		if (n == BOARDSIZE - node.board.count())
+			break;
 	}
-		
+	
 	
 	return n;
+}
+
+
+bool op_same_comp( const Node &node)
+{
+	char pos, newPos;
+	int n = 0, i;
+	vector<char> h;
+	unordered_map<char, bool> m;
+	
+	h.push_back(node.myIdx);
+	make_heap(h.begin(), h.end(), by_closeness());
+	
+	while (!h.empty())
+	{
+		pos = h.front();
+		pop_heap(h.begin(), h.end(), by_closeness()); h.pop_back();
+		for (i = 0; i < sizeof(DIRECTIONS); i++)
+		{
+			newPos = pos + DIRECTIONS[i];
+			if (m[newPos] || newPos < 0 || newPos >= BOARDSIZE)
+				continue;
+			
+			m[newPos] = true;
+			
+			if (newPos == node.opIdx)
+				return true;
+			if( !node.board[newPos])
+			{
+				h.push_back(newPos); push_heap(h.begin(),h.end());
+				n++;
+			}
+		}
+		if (n == BOARDSIZE - node.board.count())
+			break;
+	}
+	
+	
+	return false;
 }
 
 int evaluate_node( const Node &node )
 {
 	if (!node.eval)
 	{
-		int opMoves = fast_children(node, &OP);
+		const_cast<Node&>(node).eval = true;
 		
-		if (node.board.count() < BOARDSIZE / 3)
+		if (node.board.count() > CONNCOMPLIMIT && !endgame)
 		{
-			int myMoves = fast_children(node, &MY);
-			const_cast<Node &>(node).heuristic =
-						(opMoves == 0) ? numeric_limits<int>::max() - 10:
-						(myMoves == 0) ? numeric_limits<int>::min() + 10:
-						(myMoves - opMoves*2 + 60) * (int)node.board.count();
-			const_cast<Node&>(node).eval = true;
+			bool opWithMe = op_same_comp(node);
+			if (!opWithMe)
+			{
+				int mySpace = connect_comp(node, opWithMe, MY);
+				int opSpace = connect_comp(node, opWithMe, OP);
+//				draw_board(node);
+				return const_cast<Node &>(node).heuristic =
+					(opSpace == 0) ? MAXINT + mySpace:
+					(mySpace == 0) ? MININT + mySpace:
+					(mySpace > opSpace) ?
+						CLOSEDCOMPONENT * (int)node.board.count():
+						-1 * CLOSEDCOMPONENT * (int)node.board.count();
+			}
 		}
-		else
-		{
-			//implement connected component here
-			bool opWithMe;
-			int connected = connect_comp(node, opWithMe);
-			if(opWithMe)
-				const_cast<Node &>(node).heuristic =
-							(connected - opMoves*4) * (int)node.board.count();
-			else
-				const_cast<Node &>(node).heuristic =
-							connected * (int)node.board.count();
-		}
+		int opMoves = fast_children(node, &OP);
+		int myMoves = fast_children(node, &MY);
+		return const_cast<Node &>(node).heuristic =
+					(opMoves == 0) ? MAXINT + myMoves:
+					(myMoves == 0) ? MININT + myMoves:
+					(myMoves - opMoves*3 + 60) * (int)node.board.count();
 	}
 	return node.heuristic;
 }
@@ -265,283 +327,13 @@ bool fail(string message)
 	return false;
 }
 
-bool game_over(Node &node)
+bool game_over(const Node &node)
 {
-	if(node.evaluate() >= numeric_limits<int>::max()-20
-	   || node.evaluate() <= numeric_limits<int>::min() + 20)
+	int v = evaluate_node(node);
+	if(v == MAXINT || v == MININT)
 		return true;
 	else
 		return false;
-}
-
-
-
-
-
-
-
-
-bool valid_move( const BitBoard &board, const char *oldIdx,
-				const char *moveIdx )
-{
-	// cout << "valid:" <<endl;
-	char curIdx = *oldIdx;
-	
-	// check if given position is off the board or visited
-	if ( *moveIdx >= BOARDSIZE || *moveIdx < 0 || board[*moveIdx] )
-		return false; // to-position is invalid
-	
-	// get vectors representing the entire move and direction
-	char x = GETX(*moveIdx) - GETX(curIdx);
-	char y = GETY(*moveIdx) - GETY(curIdx);
-	char moveVec[2] = { x, y };
-	char moveIncr = TOIDX( SIGN(moveVec[0]), SIGN(moveVec[1]) );
-
-	if( abs(moveIncr) == 1 || abs(moveIncr) == 8
-			|| abs(moveIncr) == 7 || abs(moveIncr) == 9)
-	{ // horizontal or vertical move
-		while (curIdx != *moveIdx)
-		{
-			// move to the next position
-			curIdx += moveIncr;
-			
-			// check if the position is visited
-			if( board[curIdx] )
-				return false;
-		}
-	}
-	else
-		return false; //invalid move
-	
-	// valid move
-	return true;
-}
-
-
-// Draws a Isola board represented by a bitset, when supplied
-// with the bitset and two current positions as indexes in the bitset
-int draw_board(const Node &node)
-{
-	// cout << "A represents me, B represents you, X a visited space\n\n";
-	// cout << "draw:" <<endl;
-	
-	char i, j, idx;
-	cout << "   |";
-	for ( i = 1; i <= ROWSIZE; i++ )
-		cout << " " << (int)i << " |";
-	cout<< endl <<"___";
-	for ( i = 0; i < ROWSIZE; i++ )
-		cout << "____";
-	
-	cout << "_" << endl;
-	
-	for ( i = 0; i < ROWSIZE; i++ )
-	{
-		cout << " " << (int)i+1 << " |";
-		
-		for ( j = 0; j < ROWSIZE; j++ )
-		{
-			// get idxs for the bitset *MACRO* (col, row)
-			idx = TOIDX(j, i);
-			
-			if( idx == node.myIdx )			cout << me;
-			else if( idx == node.opIdx )	cout << op;
-			else if( node.board[idx] )		cout << " V ";
-			else 						cout << "   ";
-			// else if(idx < 10)
-			// 	cout << " " << (int)idx << " ";
-			// else
-			// 	cout << " " << (int)idx;
-			
-			cout << "|";
-		}
-		
-		if (i < ROWSIZE -1)
-		{
-			cout << endl << "---|";
-			
-			for ( j = 0; j < ROWSIZE; j++ )
-				cout << "———";
-			
-			cout << "———————|";
-		}
-		
-		cout << endl;
-	}
-	
-	cout << "---|";
-	
-	for ( i = 0; i < ROWSIZE; i++ )
-		cout << "———";
-	
-	cout << "———————|" << endl;
-	
-	return 0;
-}
-
-
-
-
-char get_children( const Node &node,
-				  vector<Node> &children,
-				  const char *player )
-{
-	// cout << "getc:" <<endl;
-	// number of children found
-	char n = 0, i = 0, curIdx;
-	char fromIdx = (*player == MY) ? node.myIdx : node.opIdx;
-	
-	for ( ; i < sizeof(DIRECTIONS); i++) {
-		// cout << "fastm:" <<endl;
-		curIdx = fromIdx + DIRECTIONS[i];
-		
-		while ( !node.board[curIdx] )
-		{
-			
-			if(	curIdx < 0 || curIdx > 63
-				|| (curIdx % ROWSIZE == 7 && i <= 2)
-				|| (curIdx % ROWSIZE == 0 && (i > 2 && i <= 5)))
-				break; //edge of table reached
-			
-			Node child;
-			if(*player == MY)
-				child = Node(node.board, &curIdx, &node.opIdx);
-			else
-				child = Node(node.board, &node.myIdx, &curIdx);
-			
-			//		child.evaluate();
-			children.push_back(child);
-			n++;
-			curIdx += DIRECTIONS[i];
-		}
-	}
-	
-	return n;
-}
-
-
-char fast_moves(const Node &node, const char *dir, const char *player)
-{
-	// cout << "fastm:" <<endl;
-	char fromIdx = (*player == MY) ? node.myIdx : node.opIdx;
-	char curIdx = fromIdx + *dir, n = 0;
-	
-	while ( valid_move( node.board, &fromIdx, &curIdx ) )
-	{
-		
-		if( (curIdx % ROWSIZE == 7 &&
-			 (*dir == NWEST || *dir == WEST || *dir == SWEST))
-		   || (curIdx % ROWSIZE == 0 &&
-			   (*dir == NEAST || *dir == EAST || *dir == SEAST)))
-			break; //edge of table reached
-		
-		n++;
-		curIdx += *dir;
-	}
-	
-	return n;
-}
-
-char fast_children(const Node &node, const char *player)
-{
-	// cout << "fastc:" <<endl;
-	// number of children found
-	char n = 0;
-	
-	n += fast_moves(node, &NORTH, player);
-	n += fast_moves(node, &SOUTH, player);
-	n += fast_moves(node, &EAST, player);
-	n += fast_moves(node, &WEST, player);
-	n += fast_moves(node, &NWEST, player);
-	n += fast_moves(node, &NEAST, player);
-	n += fast_moves(node, &SWEST, player);
-	n += fast_moves(node, &SEAST, player);
-	
-	return n;
-}
-
-
-
-
-
-
-
-
-bool take_move( Node &node )
-{
-	// cout << "take:" <<endl;
-	char newIdx = 0,
-	n = fast_children(node, &OP);
-	if(n == 0)
-		return false;
-	
-//	cout << "numKids Op: " << (int) n << endl;
-	while( true )
-	{
-		string move;
-		cout << "Please enter a move (X Y):  ";
-		getline(cin, move);
-		
-		size_t y = move.find_first_of("12345678");
-		size_t x = move.find_first_of("12345678", y+1);
-		if (x == string::npos || y == string::npos)
-		{
-			cout << "Incorrect move format, try again." <<endl;
-			continue;
-		}
-		
-		newIdx = TOIDX(move[x] - '0' - 1, move[y] - '0' - 1);
-		
-		if( !valid_move(node.board, &node.opIdx, &newIdx) )
-		{
-			cout << "Invalid move, try again." <<endl;
-			continue;
-		}
-		
-		break;
-	}
-	
-	// success
-	node.opIdx = newIdx;
-	node.board.set(newIdx, 1);
-	return true;
-}
-
-bool play( Node &initNode )
-{
-	// cout << "play:" <<endl;
-	Node curNode = initNode;
-	curNode.evaluate();
-	int alpha = MININT;
-	
-	cout << "\n\n";
-	draw_board(curNode);
-	cout << "\n\n";
-	
-	while( fast_children(curNode, &MY) > 0)
-	{
-		// cout << "playloop:" <<endl;
-		// cout <<"before "<< curNode <<endl;
-		alpha = MININT;
-		curNode = search_root(curNode, alpha);
-		// cerr <<"\n\n\n\n\n--------------------------------------"<< curNode <<endl;
-		
-		cout << "\n\n";
-		draw_board(curNode);
-		cout << "\n\n";
-		
-		if(curNode.evaluate() == MININT)
-			return false;
-		
-		if( !take_move(curNode))
-			return true;
-		
-		cout << "\n\n";
-		draw_board(curNode);
-		cout << "Move: " << curNode.board.count() -2 << "\n\n";
-	}
-	
-	return false;
 }
 
 
@@ -609,10 +401,319 @@ string display_time( const timeval &tv )
 
 
 
+
+
+
+bool valid_move( const BitBoard &board, const char *oldIdx,
+				const char *moveIdx )
+{
+	// cout << "valid:" <<endl;
+	char curIdx = *oldIdx;
+	
+	// check if given position is off the board or visited
+	if ( *moveIdx >= BOARDSIZE || *moveIdx < 0 || board[*moveIdx] )
+		return false; // to-position is invalid
+	
+	// get vectors representing the entire move and direction
+	char x = GETX(*moveIdx) - GETX(curIdx);
+	char y = GETY(*moveIdx) - GETY(curIdx);
+	char moveVec[2] = { y, x };
+	char moveIncr = TOIDX( SIGN(moveVec[0]), SIGN(moveVec[1]) );
+
+	if( abs(moveIncr) == 1 || abs(moveIncr) == ROWSIZE
+			|| abs(moveIncr) == ROWSIZE - 1 || abs(moveIncr) == ROWSIZE + 1)
+	{ // horizontal or vertical move
+		while (curIdx != *moveIdx)
+		{
+			// move to the next position
+			curIdx += moveIncr;
+			
+			// check if the position is visited
+			if( board[curIdx] )
+				return false;
+		}
+	}
+	else
+		return false; //invalid move
+	
+	// valid move
+	return true;
+}
+
+
+// Draws a Isola board represented by a bitset, when supplied
+// with the bitset and two current positions as indexes in the bitset
+int draw_board(const Node &node)
+{
+	// cout << "A represents me, B represents you, X a visited space\n\n";
+	// cout << "draw:" <<endl;
+	
+	char i, j, idx;
+	cout << "   |";
+	for ( i = 1; i <= ROWSIZE; i++ )
+		cout << " " << (int)i << " |";
+	cout<< endl <<"___";
+	for ( i = 0; i < ROWSIZE; i++ )
+		cout << "____";
+	
+	cout << "_" << endl;
+	
+	for ( i = 0; i < ROWSIZE; i++ )
+	{
+		cout << " " << (int)i+1 << " |";
+		
+		for ( j = 0; j < ROWSIZE; j++ )
+		{
+			// get idxs for the bitset *MACRO* (col, row)
+			idx = TOIDX(i, j);
+			
+			if( idx == node.myIdx )			cout << me;
+			else if( idx == node.opIdx )	cout << op;
+			else if( node.board[idx] )		cout << " V ";
+			else 						cout << "   ";
+			// else if(idx < 10)
+			// 	cout << " " << (int)idx << " ";
+			// else
+			// 	cout << " " << (int)idx;
+			
+			cout << "|";
+		}
+		
+		if (i < ROWSIZE -1)
+		{
+			cout << endl << "---|";
+			
+			for ( j = 0; j < ROWSIZE; j++ )
+				cout << "———";
+			
+			cout << "———————|";
+		}
+		
+		cout << endl;
+	}
+	
+	cout << "---|";
+	
+	for ( i = 0; i < ROWSIZE; i++ )
+		cout << "———";
+	
+	cout << "———————|\n\nMove: " << node.board.count() -2 << endl;
+	
+	return 0;
+}
+
+
+
+
+char get_children( const Node &node,
+				  vector<Node> &children,
+				  const char *player )
+{
+	// cout << "getc:" <<endl;
+	// number of children found
+	char n = 0, i = 0, curIdx;
+	char fromIdx = (*player == MY) ? node.myIdx : node.opIdx;
+	
+	for ( ; i < sizeof(DIRECTIONS); i++) {
+		// cout << "fastm:" <<endl;
+		curIdx = fromIdx + DIRECTIONS[i];
+		
+		while ( !node.board[curIdx] )
+		{
+			
+			if(	curIdx < 0 || curIdx >= BOARDSIZE
+				|| (curIdx % ROWSIZE == ROWSIZE - 1 && i <= 2)
+				|| (curIdx % ROWSIZE == 0 && (i > 2 && i <= 5)))
+				break; //edge of table reached
+			
+			Node child;
+			if(*player == MY)
+				child = Node(node.board, &curIdx, &node.opIdx);
+			else
+				child = Node(node.board, &node.myIdx, &curIdx);
+			
+			//		child.evaluate();
+			children.push_back(child);
+			n++;
+			curIdx += DIRECTIONS[i];
+		}
+	}
+	
+	return n;
+}
+
+char fast_children(const Node &node, const char *player)
+{
+	// cout << "getc:" <<endl;
+	// number of children found
+	char n = 0, i = 0, curIdx;
+	char fromIdx = (*player == MY) ? node.myIdx : node.opIdx;
+	
+	for ( ; i < sizeof(DIRECTIONS); i++) {
+		// cout << "fastm:" <<endl;
+		curIdx = fromIdx + DIRECTIONS[i];
+		
+		while ( !node.board[curIdx] )
+		{
+			
+			if(	curIdx < 0 || curIdx >= BOARDSIZE
+			   || (curIdx % ROWSIZE == ROWSIZE - 1 && i <= 2)
+			   || (curIdx % ROWSIZE == 0 && (i > 2 && i <= 5)))
+				break; //edge of table reached
+			
+			n++;
+			curIdx += DIRECTIONS[i];
+		}
+	}
+	
+	return n;
+}
+
+char fast_children_both(const Node &node, const char *player, char *myMoves, char *opMoves)
+{
+	// cout << "getc:" <<endl;
+	// number of children found
+	char i = 0, curIdxMY, curIdxOP;
+	char fromIdx = (*player == MY) ? node.myIdx : node.opIdx;
+	
+	for ( ; i < sizeof(DIRECTIONS); i++) {
+		// cout << "fastm:" <<endl;
+		curIdxMY = fromIdx + DIRECTIONS[i];
+		curIdxOP = fromIdx + DIRECTIONS[i];
+		
+		while ( !node.board[curIdxMY] )
+		{
+			
+			if(	curIdxMY < 0 || curIdxMY >= BOARDSIZE
+			   || (curIdxMY % ROWSIZE == ROWSIZE - 1 && i <= 2)
+			   || (curIdxMY % ROWSIZE == 0 && (i > 2 && i <= 5)))
+				break; //edge of table reached
+			
+			myMoves++;
+			curIdxMY += DIRECTIONS[i];
+		}
+		while ( !node.board[curIdxOP] )
+		{
+			
+			if(	curIdxOP < 0 || curIdxOP >= BOARDSIZE
+			   || (curIdxOP % ROWSIZE == ROWSIZE - 1 && i <= 2)
+			   || (curIdxOP % ROWSIZE == 0 && (i > 2 && i <= 5)))
+				break; //edge of table reached
+			
+			opMoves++;
+			curIdxOP += DIRECTIONS[i];
+		}
+	}
+	
+	return myMoves - opMoves;
+}
+
+
+
+
+
+
+
+
+bool take_move( Node &node )
+{
+	// cout << "take:" <<endl;
+	char newIdx = 0,
+	n = fast_children(node, &OP);
+	
+//	cout << "numKids Op: " << (int) n << endl;
+	while( n != 0 )
+	{
+		string move;
+		cout << "Please enter a move (X Y):  ";
+		getline(cin, move);
+		
+		size_t y = move.find_first_of("12345678");
+		size_t x = move.find_first_of("12345678", y+1);
+		if (x == string::npos || y == string::npos)
+		{
+			cout << "Incorrect move format, try again." <<endl;
+			continue;
+		}
+		
+		newIdx = TOIDX(move[y] - '0' - 1, move[x] - '0' - 1);
+		
+		if( !valid_move(node.board, &node.opIdx, &newIdx) )
+		{
+			cout << "Invalid move, try again." <<endl;
+			continue;
+		}
+		
+		break;
+	}
+	
+	// success
+	node.opIdx = newIdx;
+	node.board.set(newIdx, 1);
+	n = fast_children(node, &OP);
+	if(n == 0)
+		return false;
+	return true;
+}
+
+
+
+
+bool play( Node &initNode )
+{
+	// cout << "play:" <<endl;
+	Node curNode = initNode;
+	curNode.evaluate();
+	int alpha = MININT;
+	
+	cout << "\n\n";
+	draw_board(curNode);
+	cout << "\n\n";
+	
+	while( fast_children(curNode, &MY) > 0)
+	{
+		// cout << "playloop:" <<endl;
+		cout <<"before "<< curNode << "\t" <<endgame <<endl;
+		bool opWithMe = false;
+		cout << connect_comp(curNode, opWithMe, MY) << " " << opWithMe
+				<< endl<< endl<< endl;
+//		alpha = MININT;
+		
+//		if(!endgame)
+			curNode = search_root(curNode, alpha);
+//		else
+//		{
+//			cerr << "isolated" << endl;
+//			curNode = isolated_move(curNode);
+//		}
+//		if(evaluate_node(curNode) == CLOSEDCOMPONENT
+//		   || evaluate_node(curNode) == -1 * CLOSEDCOMPONENT)
+//			endgame = true;
+		
+		if(evaluate_node(curNode) == MININT)
+			return false;
+		cerr << endl << curNode <<endl <<"endgame: " << endgame <<endl;
+		
+		cout << "\n\n";
+		draw_board(curNode);
+		cout << "\n\n";
+		
+		if( !take_move(curNode))
+			return true;
+		
+		cout << "\n\n";
+		draw_board(curNode);
+		cout << "\n\n";
+	}
+	
+	return false;
+}
+
+
 Node search_root(Node &initNode, int &alpha)
 {
 	// set time limit
-	timeval begin, end, tv;
+	timeval begin, end, tv, tmp;
 	gettimeofday(&begin, NULL);
 	end = add_time(begin, &MAXSECS);
 	
@@ -628,10 +729,6 @@ Node search_root(Node &initNode, int &alpha)
 		try{
 			for (; i < numKids; i++)
 			{
-				// gettimeofday(&tv, NULL);
-				// tmp = split_time( diff(tv, end), numKids - i);
-				// add_time(tv, tmp );
-				// cerr << "split: " << display_time( tmp ) << endl;
 				value = -1 * alpha_beta(children[i],
 										-1*beta,
 										-1*alpha,
@@ -642,6 +739,12 @@ Node search_root(Node &initNode, int &alpha)
 				cerr << "last: " << value
 				<< "  pos: " << GETY((int)children[i].myIdx) << ","
 				<< GETX((int)children[i].myIdx);
+//				
+//				if(value == CLOSEDCOMPONENT || value == -CLOSEDCOMPONENT)
+//				{
+//					endgame = true;
+//					return children[i];
+//				}
 				
 				if(value == MAXINT)
 					return children[i];
@@ -656,12 +759,10 @@ Node search_root(Node &initNode, int &alpha)
 				<< "  pos: " << GETY((int)children[bestIdx].myIdx) << ","
 				<< GETX((int)children[bestIdx].myIdx)
 				<< endl;
-				
 								
 			}
-			
-			if(value == MININT)
-				return children[0];
+			if(alpha == MININT)
+				return children[bestIdx];
 			
 		}catch (...)
 		{
@@ -669,18 +770,21 @@ Node search_root(Node &initNode, int &alpha)
 			cerr << "ended because of time cutoff" << endl;
 			break;
 		}
+		cerr << "best: " << alpha
+		<< "  pos: " << GETY((int)children[bestIdx].myIdx) << ","
+		<< GETX((int)children[bestIdx].myIdx)<<endl;
 		
 		lastIdx = bestIdx;
 		i = 0;
-		alpha *= 1.1;
+		alpha *= .9;
 		
-		gettimeofday(&tv, NULL);
-		tv = diff(begin, tv);
+		gettimeofday(&tmp, NULL);
+		tv = diff(begin, tmp);
 		cerr << "time: " << display_time( tv )
 			<< "\tdepth:" << d << endl <<endl;
-		tv = diff(tv, end);
-		if( tv.tv_sec < (int)MAXSECS / 2)
-			break;
+//		tv = diff(tmp, end);
+//		if( tv.tv_sec < (int)MAXSECS / 2)
+//			break;
 	}
 	
 	gettimeofday(&tv, NULL);
@@ -706,7 +810,7 @@ int alpha_beta(Node &node, int alpha, int beta, const char *player,
 	if(game_over(node) || depth == 0)
 	{
 		// cerr << "\t\tleafNode:\t" << node<< endl;
-		return node.evaluate() * *player;
+		return evaluate_node(node) * *player;
 	}
 	
 	// cerr << endl;
@@ -742,6 +846,7 @@ int alpha_beta(Node &node, int alpha, int beta, const char *player,
 	// cerr << "alpha:\t" << alpha << endl;
 	return alpha;
 }
+
 
 
 
@@ -793,13 +898,45 @@ int main(int argc, char *argv[])
 		me = "*O*";
 		op = "*X*";
 	}
+
+	
+	
+	//TESTING/////////
+	
+	myIdx = TOIDX(6, 6);
+	opIdx = TOIDX(7, 6);
+	me = "*X*";
+	op = "*O*";
 	
 	board.set(myIdx, 1);
 	board.set(opIdx, 1);
+	board.set(TOIDX(0, 0), 1);
+	board.set(TOIDX(ROWSIZE-1, ROWSIZE-1), 1);
+	board.set(TOIDX(1, 4), 1);
+	board.set(TOIDX(1, 6), 1);
+	board.set(TOIDX(2, 2), 1);
+	board.set(TOIDX(2, 3), 1);
+	board.set(TOIDX(2, 4), 1);
+	board.set(TOIDX(2, 5), 1);
+	board.set(TOIDX(2, 6), 1);
+	board.set(TOIDX(2, 7), 1);
+	board.set(TOIDX(3, 1), 1);
+	board.set(TOIDX(3, 5), 1);
+	board.set(TOIDX(3, 6), 1);
+	board.set(TOIDX(3, 7), 1);
+	board.set(TOIDX(4, 2), 1);
+	board.set(TOIDX(4, 3), 1);
+	board.set(TOIDX(4, 6), 1);
+	board.set(TOIDX(5, 4), 1);
+	board.set(TOIDX(5, 5), 1);
+	board.set(TOIDX(6, 7), 1);
 	
 	
 	Node initNode (board, &myIdx, &opIdx);
-	draw_board(initNode);
+//	draw_board(initNode);
+	bool opWithMe = false;
+	
+	cout << connect_comp(initNode, opWithMe, MY) << " " << opWithMe << endl;
 	
 	
 	if(playerNum == 2)
