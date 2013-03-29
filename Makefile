@@ -13,6 +13,7 @@ LDFLAGS = -g $(LDLIBS)
 LDLIBS = 
 
 isola: isola.cpp
+	g++ -std=c++0x -o isola isola.cpp
 
 .PHONY: clean
 clean:
