@@ -62,6 +62,7 @@ static const char MY = 1;
 static const char OP = -1;
 static const char MAXDEPTH = 40;
 static const int MAXSECS = 60;
+static const int EARLYCUTOFF = MAXSECS / 4;
 static const int MININT = numeric_limits<int>::min() + 40;
 static const int MAXINT = numeric_limits<int>::max() - 40;
 
@@ -750,10 +751,10 @@ Node search_root(Node &initNode, int &alpha)
 		cerr << "time: " << display_time( tv )
 		<< "\tdepth:" << d << endl <<endl;
 		tv = diff(tmp, end);
-		if( tv.tv_sec < (3 * (long)MAXSECS / 4))
+		if( tv.tv_sec < EARLYCUTOFF)
 		{
 			cerr << "early cuttoff:\t" << tv.tv_sec
-					<< "\t" << (3*(long)MAXSECS/4) << endl;
+					<< "\t" << (long)MAXSECS/4 << endl;
 			break;
 		}
 	}
