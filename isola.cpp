@@ -41,62 +41,66 @@ using namespace std;
 static const char ROWSIZE = 8;
 static const char BOARDSIZE = ROWSIZE * ROWSIZE;
 static const char	NEAST = -ROWSIZE + 1,
-NORTH = -ROWSIZE,
-NWEST = -ROWSIZE - 1,
-WEST = -1,
-EAST = 1,
-SWEST = ROWSIZE - 1,
-SOUTH = ROWSIZE,
-SEAST = ROWSIZE + 1;
+					NORTH = -ROWSIZE,
+					NWEST = -ROWSIZE - 1,
+					WEST = -1,
+					EAST = 1,
+					SWEST = ROWSIZE - 1,
+					SOUTH = ROWSIZE,
+					SEAST = ROWSIZE + 1;
 
 static const char DIRECTIONS[] = { NWEST,
-	WEST,
-	SWEST,
-	NEAST,
-	EAST,
-	SEAST,
-	NORTH,
-	SOUTH};
+									WEST,
+									SWEST,
+									NEAST,
+									EAST,
+									SEAST,
+									NORTH,
+									SOUTH};
 
 static const char MY = 1;
 static const char OP = -1;
-//Keep Even?
 static const char MAXDEPTH = 40;
 static const int MAXSECS = 60;
 static const int MININT = numeric_limits<int>::min() + 40;
 static const int MAXINT = numeric_limits<int>::max() - 40;
+
 static const char CONNCOMPLIMIT = ROWSIZE * ROWSIZE / 3;
 static const int CLOSEDCOMPONENT = MAXINT / 64;
 
 
 typedef bitset<BOARDSIZE> BitBoard;
 class Node;
+struct HashEntry;
 struct by_max;
+struct by_closeness;
 
 
 string me, op, block = "|||";
-bool opWithMe;
+char connCompSplitDepth = numeric_limits<char>::max();
 vector<Node> moves;
 
 
-int evaluate_node( const Node &node );
+
+
 
 int usage();
-bool fail(string);
 bool game_over(const Node&);
-bool lookup(const BitBoard &board, int *hashValue);
-bool store(const BitBoard &board);
+bool lookup(const Node &node);
+bool store(const Node &node, const char &scoreType,
+		   const int &score, const char &bestIdx);
 int draw_board(const Node&);
-bool valid_move( const BitBoard&, const char*, const char*);
-
 
 string display_time( const timeval &tv );
-timeval split_time( const timeval &tv, char split);
 timeval add_time( const timeval &tv, const int *seconds);
 void add_time( timeval &to, const timeval &add);
 bool past_time(const timeval &cur, const timeval &end);
 timeval diff(const timeval &start, const timeval &end);
 
+
+
+int evaluate_node( const Node &node );
+bool valid_move( const BitBoard&, const char*, const char*);
 
 char get_children( const Node&,	vector<Node>&, const char* player);
 char fast_children(const Node&, const char*);
@@ -108,6 +112,7 @@ bool play( Node& );
 
 Node search_root(Node &, int&);
 int alpha_beta(Node&, int, int, const char*, const timeval&, int);
+int alpha_beta_transpo(Node&, int, int, const char*, const timeval&, int);
 
 Node isolated_move(const Node &node);
 
@@ -124,38 +129,24 @@ public:
 	int heuristic;
 	bool eval;
 	
-	Node(const BitBoard & board, const char myIdx, const char opIdx)
+	Node(const BitBoard & board, const char &myIdx, const char &opIdx)
+		:eval(false), myIdx(myIdx), opIdx(opIdx), board(board)
 	{
-		this->board = board;
-		this->opIdx = opIdx;
-		this->myIdx = myIdx;
 		this->board.set(myIdx, 1);
 		this->board.set(opIdx, 1);
-		this->eval = false;
 	}
 	
 	Node( const Node &other )
+		:eval(other.eval), myIdx(other.myIdx),
+		opIdx(other.opIdx), board(other.board),
+		heuristic(other.heuristic)
 	{
 		// cout << "node copied" << endl;
-		this->board = other.board;
-		this->opIdx = other.opIdx;
-		this->myIdx = other.myIdx;
-		this->heuristic = other.heuristic;
-		this->eval = other.eval;
 	}
 	
 	Node()
+		:eval(false)
 	{
-		this->eval = false;
-	}
-	
-	int evaluate()
-	{
-		if(!eval)
-		{
-			evaluate_node(*this);
-		}
-		return heuristic;
 	}
 	
 	friend ostream& operator<< (ostream &o, const Node &n)
@@ -169,14 +160,11 @@ public:
 
 struct HashEntry
 {
-	BitBoard board;
-	char opIdx;
-	char myIdx;
 	char scoreType;
-	char score;
+	int score;
 	// Relies on static ordering of returned moves
 	// so it should be checked before sorting/shuffling
-	char bestMove;
+	char bestMoveIdx;
 };
 
 
@@ -303,8 +291,11 @@ int evaluate_node( const Node &node )
 		
 		if (node.board.count() > CONNCOMPLIMIT)
 		{
-			if (!opWithMe)
+			bool opWithMe = false;
+			if (node.board.count() < connCompSplitDepth)
+			{
 				opWithMe = op_same_comp(node);
+			}
 			if (!opWithMe)
 			{
 				int mySpace = connect_comp(node, opWithMe, MY);
@@ -334,12 +325,6 @@ int usage()
 	"Where PLAYER is [1/2] representing "<<
 	"the player this instance is"<< endl;
 	return 1;
-}
-
-bool fail(string message)
-{
-	cout << "\n\nERROR!!!!\n" << message << endl;
-	return false;
 }
 
 bool game_over(const Node &node)
@@ -400,15 +385,6 @@ void add_time( timeval &to, const timeval &add)
 		to.tv_usec -= 1000000;
 		to.tv_sec++;
 	}
-}
-
-timeval split_time( const timeval &tv, char split)
-{
-	timeval tmp;
-	long usecs = ((tv.tv_sec*1000000) + tv.tv_usec) / split;
-	tmp.tv_sec = usecs / 1000000;
-	tmp.tv_usec = usecs % 1000000;
-	return tmp;
 }
 
 string display_time( const timeval &tv )
@@ -708,6 +684,15 @@ Node search_root(Node &initNode, int &alpha)
 	sort(children.begin(), children.end(), by_max());
 	// random_shuffle(children.begin(),children.end());
 	
+	if (initNode.board.count() < connCompSplitDepth)
+	{
+		bool opWithMe = op_same_comp(initNode);
+		if(!opWithMe)
+		{
+			connCompSplitDepth = initNode.board.count();
+		}
+	}
+	
 	int i = 0, d = 0, value, beta = MAXINT, bestIdx = 0, lastIdx = 0;
 	for(; d < MAXDEPTH ; d += 2)
 	{
@@ -765,8 +750,12 @@ Node search_root(Node &initNode, int &alpha)
 		cerr << "time: " << display_time( tv )
 		<< "\tdepth:" << d << endl <<endl;
 		tv = diff(tmp, end);
-		if( tv.tv_sec < 3 * (int)MAXSECS / 4)
+		if( tv.tv_sec < (3 * (long)MAXSECS / 4))
+		{
+			cerr << "early cuttoff:\t" << tv.tv_sec
+					<< "\t" << (3*(long)MAXSECS/4) << endl;
 			break;
+		}
 	}
 	
 	gettimeofday(&tv, NULL);
@@ -805,9 +794,6 @@ int alpha_beta(Node &node, int alpha, int beta, const char *player,
 	int i = 0, value = MININT;
 	for ( ; i < numKids; i++)
 	{
-		// gettimeofday(&tv, NULL);
-		// add_time(tv, split_time( diff(tv, end), numKids - i));
-		
 		value = MAX(value,
 					-1*(alpha_beta(children[i],
 								   -1 * beta,
@@ -851,7 +837,7 @@ int alpha_beta_transpo(Node &node, int alpha, int beta, const char *player,
 	// cerr << endl;
 	
 //	HashEntry entry;
-//	bool hash_hit = lookup(node, int *hashValue);
+//	bool hash_hit = lookup(node);
 	
 	vector<Node> children;
 	char numKids = get_children(node, children, player);
@@ -861,9 +847,6 @@ int alpha_beta_transpo(Node &node, int alpha, int beta, const char *player,
 	int i = 0, value = MININT;
 	for ( ; i < numKids; i++)
 	{
-		// gettimeofday(&tv, NULL);
-		// add_time(tv, split_time( diff(tv, end), numKids - i));
-		
 		value = MAX(value,
 					-1*(alpha_beta(children[i],
 								   -1 * beta,
@@ -897,7 +880,7 @@ int alpha_beta_transpo(Node &node, int alpha, int beta, const char *player,
 bool play( Node &curNode )
 {
 	// cout << "play:" <<endl;
-	curNode.evaluate();
+	evaluate_node(curNode);
 	int alpha = MININT;
 	
 	cout << "\n\n";
@@ -907,9 +890,7 @@ bool play( Node &curNode )
 	while( fast_children(curNode, &MY) > 0)
 	{
 		// cout << "playloop:" <<endl;
-		cout <<"before "<< curNode << "\t" <<opWithMe <<endl;
-		cout << "opWithMe: " << opWithMe
-		<< endl;
+		cout <<"before: "<< curNode <<endl << endl;
 		
 //		alpha = MININT;
 		
@@ -922,8 +903,7 @@ bool play( Node &curNode )
 		
 		if(evaluate_node(curNode) == MININT)
 			return false;
-		cerr << endl << curNode <<endl <<"opWithMe: " << opWithMe
-		<< endl<< endl<<endl;
+		cout <<"after: "<< curNode <<endl << endl <<endl;
 		
 		
 		if( !take_move(curNode))
@@ -981,43 +961,42 @@ int main(int argc, char *argv[])
 		op = "*X*";
 	}
 	
-	//
-	//
-	//	//TESTING/////////
-	//
-	//	myIdx = TOIDX(6, 6);
-	//	opIdx = TOIDX(7, 6);
-	//	me = "*X*";
-	//	op = "*O*";
-	//
-	//	board.set(myIdx, 1);
-	//	board.set(opIdx, 1);
-	//	board.set(TOIDX(0, 0), 1);
-	//	board.set(TOIDX(ROWSIZE-1, ROWSIZE-1), 1);
-	//	board.set(TOIDX(1, 4), 1);
-	//	board.set(TOIDX(1, 6), 1);
-	//	board.set(TOIDX(2, 2), 1);
-	//	board.set(TOIDX(2, 3), 1);
-	//	board.set(TOIDX(2, 4), 1);
-	//	board.set(TOIDX(2, 5), 1);
-	//	board.set(TOIDX(2, 6), 1);
-	//	board.set(TOIDX(2, 7), 1);
-	//	board.set(TOIDX(3, 1), 1);
-	//	board.set(TOIDX(3, 5), 1);
-	//	board.set(TOIDX(3, 6), 1);
-	//	board.set(TOIDX(3, 7), 1);
-	//	board.set(TOIDX(4, 2), 1);
-	//	board.set(TOIDX(4, 3), 1);
-	//	board.set(TOIDX(4, 6), 1);
-	//	board.set(TOIDX(5, 4), 1);
-	//	board.set(TOIDX(5, 5), 1);
-	//	board.set(TOIDX(6, 7), 1);
+
+
+	//TESTING/////////
+
+	myIdx = TOIDX(6, 6);
+	opIdx = TOIDX(7, 6);
+	me = "*X*";
+	op = "*O*";
+
+	board.set(myIdx, 1);
+	board.set(opIdx, 1);
+	board.set(TOIDX(0, 0), 1);
+	board.set(TOIDX(ROWSIZE-1, ROWSIZE-1), 1);
+	board.set(TOIDX(1, 4), 1);
+	board.set(TOIDX(1, 6), 1);
+	board.set(TOIDX(2, 2), 1);
+	board.set(TOIDX(2, 3), 1);
+	board.set(TOIDX(2, 4), 1);
+	board.set(TOIDX(2, 5), 1);
+	board.set(TOIDX(2, 6), 1);
+	board.set(TOIDX(2, 7), 1);
+	board.set(TOIDX(3, 1), 1);
+	board.set(TOIDX(3, 5), 1);
+	board.set(TOIDX(3, 6), 1);
+	board.set(TOIDX(3, 7), 1);
+	board.set(TOIDX(4, 2), 1);
+	board.set(TOIDX(4, 3), 1);
+	board.set(TOIDX(4, 6), 1);
+	board.set(TOIDX(5, 4), 1);
+	board.set(TOIDX(5, 5), 1);
+	board.set(TOIDX(6, 7), 1);
 	
 	
 	Node initNode (board, myIdx, opIdx);
 	cerr << initNode << endl;
 	moves.push_back(initNode);
-	opWithMe = true;
 	
 	//	cerr << connect_comp(initNode, opWithMe, MY) << " " << opWithMe << endl;
 	
