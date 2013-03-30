@@ -965,36 +965,6 @@ int main(int argc, char *argv[])
 
 
 	//TESTING/////////
-
-	myIdx = TOIDX(6, 6);
-	opIdx = TOIDX(7, 6);
-	me = "*X*";
-	op = "*O*";
-
-	board.set(myIdx, 1);
-	board.set(opIdx, 1);
-	board.set(TOIDX(0, 0), 1);
-	board.set(TOIDX(ROWSIZE-1, ROWSIZE-1), 1);
-	board.set(TOIDX(1, 4), 1);
-	board.set(TOIDX(1, 6), 1);
-	board.set(TOIDX(2, 2), 1);
-	board.set(TOIDX(2, 3), 1);
-	board.set(TOIDX(2, 4), 1);
-	board.set(TOIDX(2, 5), 1);
-	board.set(TOIDX(2, 6), 1);
-	board.set(TOIDX(2, 7), 1);
-	board.set(TOIDX(3, 1), 1);
-	board.set(TOIDX(3, 5), 1);
-	board.set(TOIDX(3, 6), 1);
-	board.set(TOIDX(3, 7), 1);
-	board.set(TOIDX(4, 2), 1);
-	board.set(TOIDX(4, 3), 1);
-	board.set(TOIDX(4, 6), 1);
-	board.set(TOIDX(5, 4), 1);
-	board.set(TOIDX(5, 5), 1);
-	board.set(TOIDX(6, 7), 1);
-	
-	
 	Node initNode (board, myIdx, opIdx);
 	cerr << initNode << endl;
 	moves.push_back(initNode);
