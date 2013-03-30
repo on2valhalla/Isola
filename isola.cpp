@@ -180,33 +180,35 @@ struct HashEntry
 
 
 // Hash combination emulates from Boost library
-template<>
-class hash<Node> {
-public:
-    size_t operator()(const Node &n) const
-    {
-    	hash<bitset<BOARDSIZE> > bHash;
-    	hash<char > cHash;
-		size_t hash = bHash(n.board);
-		hash ^= cHash(n.myIdx)
-		+ 0x9e3779b9 + (hash << 6) + (hash >> 2);
-		hash ^= cHash(n.opIdx)
-		+ 0x9e3779b9 + (hash << 6) + (hash >> 2);
-		return hash;
-    }
-};
-template<> class equal_to<Node>
+namespace std
 {
-public:
-	bool operator() (const Node& lhs, const Node& rhs) const
+	template<>
+	class hash<Node> {
+	public:
+	    size_t operator()(const Node &n) const
+	    {
+	    	hash<bitset<BOARDSIZE> > bHash;
+	    	hash<char > cHash;
+			size_t hash = bHash(n.board);
+			hash ^= cHash(n.myIdx)
+			+ 0x9e3779b9 + (hash << 6) + (hash >> 2);
+			hash ^= cHash(n.opIdx)
+			+ 0x9e3779b9 + (hash << 6) + (hash >> 2);
+			return hash;
+	    }
+	};
+	template<> class equal_to<Node>
 	{
-		return lhs.board == rhs.board
-				&& lhs.myIdx == rhs.myIdx
-				&& lhs.opIdx == rhs.opIdx;
-	}
-	
-};
-
+	public:
+		bool operator() (const Node& lhs, const Node& rhs) const
+		{
+			return lhs.board == rhs.board
+					&& lhs.myIdx == rhs.myIdx
+					&& lhs.opIdx == rhs.opIdx;
+		}
+		
+	};
+}
 
 
 // COMPARISON STRUCTS
