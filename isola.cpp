@@ -178,7 +178,7 @@ struct HashEntry
 	char depth;
 };
 
-
+namespace std {
 // Hash combination emulates from Boost library
 template<>
 class hash<Node> {
@@ -206,7 +206,7 @@ public:
 	}
 	
 };
-
+}
 
 
 // COMPARISON STRUCTS
