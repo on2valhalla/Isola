@@ -967,6 +967,251 @@ int alpha_beta_transpo(Node &node, int alpha, int beta, const char *player,
 	vector<Node> children;
 	char numKids = get_children(node, children, player);
 	//	sort(children.begin(), children.end(), by_max());
+	random_shuffle(children.begin(),children.end());
+	
+	int i = 0, value, best = MININT;
+	char bestIdx = -1;
+	for ( ; i < numKids; i++)
+	{
+		value = -1*(alpha_beta_transpo(children[i],
+							   -1 * beta,
+							   -1 * alpha,
+							   (*player == MY) ? &OP : &MY,
+							   end,
+							   depth - 1));
+		// cerr << "\t\tresult: " << result <<endl;
+		
+		if( value > best)
+		{
+			best = value;
+			bestIdx = i;
+		}
+		if( best > alpha)
+			alpha = best;
+		if( best >= beta)
+			break;
+	}
+	// cerr << "alpha:\t" << alpha << endl;
+	
+	if(best <= alpha) // a lowerbound value
+		store(node, LOWERBOUND, best, bestIdx, depth);
+	else if(best >= beta) // an upperbound value
+		store(node, UPPERBOUND, best, bestIdx, depth);
+	else // a true minimax value
+		store(node, EXACTSCORE, best, bestIdx, depth);
+	return best;
+}
+
+
+
+
+
+
+
+
+
+
+bool play( Node &curNode )
+{
+	// cout << "play:" <<endl;
+	evaluate_node(curNode);
+	int alpha = MININT;
+	
+	cout << "\n\n";
+	draw_board(curNode);
+	cout << "\n\n";
+	
+	while( fast_children(curNode, &MY) > 0)
+	{
+		// cout << "playloop:" <<endl;
+		cout <<"before: "<< curNode <<endl << endl;
+		
+//		alpha = MININT;
+		
+		curNode = search_root(curNode, alpha);
+		
+		cout <<"after: "<< curNode <<"\ttranspo: "<< transpos.size()
+			<<"\tbuckets: "<< transpos.bucket_count()
+			<<endl << endl <<endl;
+		
+		cout << "\n\n";
+		draw_board(curNode);
+		cout << "\n\n";
+		
+		
+		if(evaluate_node(curNode) == MININT)
+			return false;
+		
+		
+		if( !take_move(curNode, alpha))
+			return true;
+		
+		cout << "\n\n";
+		draw_board(curNode);
+		cout << "\n\n";
+	}
+	
+	return false;
+}
+
+void serialize_table()
+{
+	
+}
+
+int main(int argc, char *argv[])
+{
+	/* USAGE
+	 *
+	 * $ isola PLAYER
+	 *
+	 *	where SIZE is a single int board size (normally should be 8)
+	 *	and player is [1 or 2] representing the player this instance is
+	 *
+	 */
+	transpos.reserve(100000000);
+	
+	char playerNum;
+	try
+	{ // take in command line argument
+		assert(argc == 2);
+		playerNum = argv[1][0] - '0';
+	}
+	catch (int e)
+	{
+		return usage();
+	}
+	
+	// setup the board: init to zeros, add starting positions
+	BitBoard board;
+	board.reset();
+	
+	char myIdx, opIdx;
+	if(playerNum == 1)
+	{
+		myIdx = TOIDX(0, 0);
+		opIdx = TOIDX(ROWSIZE-1, ROWSIZE-1);
+		me = "*X*";
+		op = "*O*";
+	}
+	else
+	{
+		myIdx = TOIDX(ROWSIZE-1, ROWSIZE-1);
+		opIdx = TOIDX(0, 0);
+		me = "*O*";
+		op = "*X*";
+	}
+	
+
+
+//	//TESTING/////////
+//
+//	myIdx = TOIDX(6, 6);
+//	opIdx = TOIDX(7, 6);
+//	me = "*X*";
+//	op = "*O*";
+//
+//	board.set(myIdx, 1);
+//	board.set(opIdx, 1);
+//	board.set(TOIDX(0, 0), 1);
+//	board.set(TOIDX(ROWSIZE-1, ROWSIZE-1), 1);
+//	board.set(TOIDX(1, 4), 1);
+//	board.set(TOIDX(1, 6), 1);
+//	board.set(TOIDX(2, 2), 1);
+//	board.set(TOIDX(2, 3), 1);
+//	board.set(TOIDX(2, 4), 1);
+//	board.set(TOIDX(2, 5), 1);
+//	board.set(TOIDX(2, 6), 1);
+//	board.set(TOIDX(2, 7), 1);
+//	board.set(TOIDX(3, 1), 1);
+//	board.set(TOIDX(3, 5), 1);
+//	board.set(TOIDX(3, 6), 1);
+//	board.set(TOIDX(3, 7), 1);
+//	board.set(TOIDX(4, 2), 1);
+//	board.set(TOIDX(4, 3), 1);
+//	board.set(TOIDX(4, 6), 1);
+//	board.set(TOIDX(5, 4), 1);
+//	board.set(TOIDX(5, 5), 1);
+//	board.set(TOIDX(6, 7), 1);
+	
+	
+	Node initNode (board, myIdx, opIdx);
+	cerr << initNode << endl;
+	moves.push_back(initNode);
+	
+	//	cerr << connect_comp(initNode, opWithMe, MY) << " " << opWithMe << endl;
+	
+	int alpha = MININT;
+	if(playerNum == 2)
+	{
+		draw_board(initNode);
+		take_move(initNode, alpha);
+	}
+	
+	
+	bool win = play(initNode);
+	
+	cout << "\n\n";
+	draw_board(initNode);
+	cout << "\n\n";
+	
+	if ( win )
+		cout << "!!!!!!!    I win    !!!!!!!!!" << endl;
+	else
+		cout << ":( :(  You win  :( :(" << endl;
+	
+	
+	// completed sucessfully
+	return 0;
+}
+
+
+
+
+
+
+
+
+
+
+d) )
+		throw "Ran out of time";
+	
+	HashEntry entry;
+	bool hash_hit = lookup(node, &entry);
+	if(hash_hit && entry.depth >= depth)
+	{
+		switch(entry.scoreType)
+		{
+			case EXACTSCORE:
+				return entry.score;
+				break;
+			case LOWERBOUND:
+				if(alpha < entry.score)
+					alpha = entry.score;
+				break;
+			case UPPERBOUND:
+				if(beta > entry.score)
+					beta = entry.score;
+				break;
+		}
+		if(alpha >= beta)
+			return entry.score;
+	}
+	
+	if(game_over(node) || depth == 0)
+	{
+		// cerr << "\t\tleafNode:\t" << node<< endl;
+		return evaluate_node(node) * *player;
+	}
+	
+	// cerr << endl;
+	
+	
+	
+	vector<Node> children;
+	char numKids = get_children(node, children, player);
+	//	sort(children.begin(), children.end(), by_max());
 	//	random_shuffle(children.begin(),children.end());
 	
 	int i = 0, value, best = MININT;
