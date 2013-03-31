@@ -172,17 +172,17 @@ public:
 		return o;
 	}
 	
-    friend class boost::serialization::access;
-    // When the class Archive corresponds to an output archive, the
-    // & operator is defined similar to <<.  Likewise, when the class Archive
-    // is a type of input archive the & operator is defined similar to >>.
-    template<class Archive>
-    void serialize(Archive & ar, const unsigned int version)
-    {
-        ar & board;
-        ar & opIdx;
-		ar & myIdx;
-    }
+  //   friend class boost::serialization::access;
+  //   // When the class Archive corresponds to an output archive, the
+  //   // & operator is defined similar to <<.  Likewise, when the class Archive
+  //   // is a type of input archive the & operator is defined similar to >>.
+  //   template<class Archive>
+  //   void serialize(Archive & ar, const unsigned int version)
+  //   {
+  //       ar & board;
+  //       ar & opIdx;
+		// ar & myIdx;
+  //   }
 };
 
 
@@ -195,17 +195,17 @@ struct HashEntry
 	char depth;
 	
 	
-    friend class boost::serialization::access;
-    // When the class Archive corresponds to an output archive, the
-    // & operator is defined similar to <<.  Likewise, when the class Archive
-    // is a type of input archive the & operator is defined similar to >>.
-    template<class Archive>
-    void serialize(Archive & ar, const unsigned int version)
-    {
-        ar & scoreType;
-        ar & score;
-		ar & depth;
-    }
+  //   friend class boost::serialization::access;
+  //   // When the class Archive corresponds to an output archive, the
+  //   // & operator is defined similar to <<.  Likewise, when the class Archive
+  //   // is a type of input archive the & operator is defined similar to >>.
+  //   template<class Archive>
+  //   void serialize(Archive & ar, const unsigned int version)
+  //   {
+  //       ar & scoreType;
+  //       ar & score;
+		// ar & depth;
+  //   }
 };
 
 namespace std {
