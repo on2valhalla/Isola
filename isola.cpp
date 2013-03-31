@@ -110,7 +110,7 @@ char get_children( const Node&,	vector<Node>&, const char* player);
 char fast_children(const Node&, const char*);
 
 
-bool take_move( Node& );
+bool take_move( Node& , int&);
 bool play( Node& );
 
 
@@ -162,7 +162,7 @@ public:
 	friend ostream& operator<< (ostream &o, const Node &n)
 	{
 		o << "myP: " << (int) n.myIdx << "\topP: "
-		<< (int) n.opIdx << "\th: " << n.heuristic;
+		<< (int) n.opIdx << "\th: " << evaluate_node(n);
 		return o;
 	}
 };
@@ -180,35 +180,33 @@ struct HashEntry
 
 
 // Hash combination emulates from Boost library
-namespace std
+template<>
+class hash<Node> {
+public:
+    size_t operator()(const Node &n) const
+    {
+    	hash<bitset<BOARDSIZE> > bHash;
+    	hash<char > cHash;
+		size_t hash = bHash(n.board);
+		hash ^= cHash(n.myIdx)
+		+ 0x9e3779b9 + (hash << 6) + (hash >> 2);
+		hash ^= cHash(n.opIdx)
+		+ 0x9e3779b9 + (hash << 6) + (hash >> 2);
+		return hash;
+    }
+};
+template<> class equal_to<Node>
 {
-	template<>
-	class hash<Node> {
-	public:
-	    size_t operator()(const Node &n) const
-	    {
-	    	hash<bitset<BOARDSIZE> > bHash;
-	    	hash<char > cHash;
-			size_t hash = bHash(n.board);
-			hash ^= cHash(n.myIdx)
-			+ 0x9e3779b9 + (hash << 6) + (hash >> 2);
-			hash ^= cHash(n.opIdx)
-			+ 0x9e3779b9 + (hash << 6) + (hash >> 2);
-			return hash;
-	    }
-	};
-	template<> class equal_to<Node>
+public:
+	bool operator() (const Node& lhs, const Node& rhs) const
 	{
-	public:
-		bool operator() (const Node& lhs, const Node& rhs) const
-		{
-			return lhs.board == rhs.board
-					&& lhs.myIdx == rhs.myIdx
-					&& lhs.opIdx == rhs.opIdx;
-		}
-		
-	};
-}
+		return lhs.board == rhs.board
+				&& lhs.myIdx == rhs.myIdx
+				&& lhs.opIdx == rhs.opIdx;
+	}
+	
+};
+
 
 
 // COMPARISON STRUCTS
@@ -677,7 +675,7 @@ char fast_children_both(const Node &node, const char *player,
 
 
 
-bool take_move( Node &node )
+bool take_move( Node &node, int &alpha)
 {
 	// cout << "take:" <<endl;
 	char newIdx = 0,
@@ -699,6 +697,7 @@ bool take_move( Node &node )
 			node.opIdx = prevNode.opIdx;
 			node.heuristic = prevNode.heuristic;
 			node.eval = node.eval;
+			alpha = MININT;
 			draw_board(node);
 			continue;
 		}
@@ -1031,6 +1030,10 @@ bool play( Node &curNode )
 		
 		curNode = search_root(curNode, alpha);
 		
+		cout <<"after: "<< curNode <<"\ttranspo: "<< transpos.size()
+			<<"\tbuckets: "<< transpos.bucket_count()
+			<<endl << endl <<endl;
+		
 		cout << "\n\n";
 		draw_board(curNode);
 		cout << "\n\n";
@@ -1038,10 +1041,9 @@ bool play( Node &curNode )
 		
 		if(evaluate_node(curNode) == MININT)
 			return false;
-		cout <<"after: "<< curNode <<endl << endl <<endl;
 		
 		
-		if( !take_move(curNode))
+		if( !take_move(curNode, alpha))
 			return true;
 		
 		cout << "\n\n";
@@ -1067,6 +1069,7 @@ int main(int argc, char *argv[])
 	 *	and player is [1 or 2] representing the player this instance is
 	 *
 	 */
+	transpos.reserve(100000000);
 	
 	char playerNum;
 	try
@@ -1138,11 +1141,11 @@ int main(int argc, char *argv[])
 	
 	//	cerr << connect_comp(initNode, opWithMe, MY) << " " << opWithMe << endl;
 	
-	
+	int alpha = MININT;
 	if(playerNum == 2)
 	{
 		draw_board(initNode);
-		take_move(initNode);
+		take_move(initNode, alpha);
 	}
 	
 	
@@ -1156,7 +1159,6 @@ int main(int argc, char *argv[])
 		cout << "!!!!!!!    I win    !!!!!!!!!" << endl;
 	else
 		cout << ":( :(  You win  :( :(" << endl;
-	
 	
 	
 	// completed sucessfully
