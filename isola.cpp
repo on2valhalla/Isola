@@ -66,7 +66,7 @@ static const int EARLYCUTOFF = MAXSECS / 4;
 static const int MININT = numeric_limits<int>::min() + 40;
 static const int MAXINT = numeric_limits<int>::max() - 40;
 
-static const char CONNCOMPLIMIT = ROWSIZE * ROWSIZE / 3;
+static const char CONNCOMPLIMIT = ROWSIZE * ROWSIZE / 4;
 static const int CLOSEDCOMPONENT = MAXINT / 64;
 
 static const char LOWERBOUND = 2;
@@ -108,6 +108,7 @@ bool valid_move( const BitBoard&, const char*, const char*);
 
 char get_children( const Node&,	vector<Node>&, const char* player);
 char fast_children(const Node&, const char*);
+char fast_children_both(const Node &node, char *myMoves, char *opMoves);
 
 
 bool take_move( Node& , int&);
@@ -370,12 +371,13 @@ int evaluate_node( const Node &node )
 				-1 * CLOSEDCOMPONENT * (int)node.board.count() - opSpace;
 			}
 		}
-		int opMoves = fast_children(node, &OP);
-		int myMoves = fast_children(node, &MY);
+		char myMoves=0, opMoves=0;
+		fast_children_both(node, &myMoves, &opMoves);
+		
 		return const_cast<Node &>(node).heuristic =
-		(opMoves == 0) ? MAXINT + myMoves:
-		(myMoves == 0) ? MININT + myMoves:
-		(myMoves - opMoves*3 + 60) * (int)node.board.count();
+			(opMoves == 0) ? MAXINT + myMoves:
+			(myMoves == 0) ? MININT + myMoves:
+			(myMoves - opMoves*3 + 60) * (int)node.board.count();
 	}
 	return node.heuristic;
 }
@@ -628,18 +630,16 @@ char fast_children(const Node &node, const char *player)
 	return n;
 }
 
-char fast_children_both(const Node &node, const char *player,
-						char *myMoves, char *opMoves)
+char fast_children_both(const Node &node, char *myMoves, char *opMoves)
 {
 	// cout << "getc:" <<endl;
 	// number of children found
 	char i = 0, curIdxMY, curIdxOP;
-	char fromIdx = (*player == MY) ? node.myIdx : node.opIdx;
 	
 	for ( ; i < sizeof(DIRECTIONS); i++) {
 		// cout << "fastm:" <<endl;
-		curIdxMY = fromIdx + DIRECTIONS[i];
-		curIdxOP = fromIdx + DIRECTIONS[i];
+		curIdxMY = node.myIdx + DIRECTIONS[i];
+		curIdxOP = node.opIdx + DIRECTIONS[i];
 		
 		while ( !node.board[curIdxMY] )
 		{
@@ -649,7 +649,7 @@ char fast_children_both(const Node &node, const char *player,
 			   || (curIdxMY % ROWSIZE == 0 && (i > 2 && i <= 5)))
 				break; //edge of table reached
 			
-			myMoves++;
+			(*myMoves)++;
 			curIdxMY += DIRECTIONS[i];
 		}
 		while ( !node.board[curIdxOP] )
@@ -660,12 +660,12 @@ char fast_children_both(const Node &node, const char *player,
 			   || (curIdxOP % ROWSIZE == 0 && (i > 2 && i <= 5)))
 				break; //edge of table reached
 			
-			opMoves++;
+			(*opMoves)++;
 			curIdxOP += DIRECTIONS[i];
 		}
 	}
 	
-	return myMoves - opMoves;
+	return (*myMoves) - (*opMoves);
 }
 
 
