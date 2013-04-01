@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VariablesViewState
+   version = "1.0">
+   <ContextStates>
+      <ContextState
+         contextName = "search_root(Node&amp;):main.cpp">
+      </ContextState>
+      <ContextState
+         contextName = "alpha_beta(Node&amp;, int, int, char const*, timeval const&amp;, int):main.cpp">
+      </ContextState>
+   </ContextStates>
+</VariablesViewState>
