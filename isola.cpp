@@ -23,9 +23,8 @@
 #include <sstream>		/* stringstream */
 #include <unordered_map> /* hash set */
 #include <algorithm>	/* heap functions */
-#include "boost_serialization_unordered_map.hpp"
-#include <boost/archive/text_oarchive.hpp>
-#include <boost/serialization/bitset.hpp>
+#include <google/dense_hash_map>
+#include <google/sparse_hash_map>
 
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
@@ -39,7 +38,6 @@
 
 
 using namespace std;
-
 
 //-------------------GLOBAL CONSTANTS-----------------------------------------
 //
@@ -65,7 +63,7 @@ static const char DIRECTIONS[] = { NWEST,
 static const char MY = 1;
 static const char OP = -1;
 static const char MAXDEPTH = 40;
-static const int MAXSECS = 60;
+static const int MAXSECS = 20;
 static const int EARLYCUTOFF = MAXSECS / 4;
 static const int MININT = numeric_limits<int>::min() + 40;
 static const int MAXINT = numeric_limits<int>::max() - 40;
@@ -93,6 +91,11 @@ struct by_closeness;
 
 typedef bitset<BOARDSIZE> BitBoard;
 typedef unordered_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
+//typedef google::dense_hash_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
+//typedef google::sparse_hash_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
+//typedef unordered_map<size_t, HashEntry> NodeMap;
+//typedef google::dense_hash_map<size_t, HashEntry> NodeMap;
+//typedef google::sparse_hash_map<size_t, HashEntry> NodeMap;
 
 
 int usage();
@@ -166,23 +169,11 @@ public:
 	
 	friend ostream& operator<< (ostream &o, const Node &n)
 	{
-		o << "myP: " << (int) n.myIdx
-		<< "  pos: " << GETY((int)n.myIdx) << ","
-		<< GETX((int)n.myIdx) << "\th: " << evaluate_node(n);
+		o << "  myPos: " << GETY((int)n.myIdx) << ","
+		<< GETX((int)n.myIdx) << "  opPos: " << GETY((int)n.opIdx) << ","
+		<< GETX((int)n.opIdx) << "\th: " << evaluate_node(n);
 		return o;
 	}
-	
-    friend class boost::serialization::access;
-    // When the class Archive corresponds to an output archive, the
-    // & operator is defined similar to <<.  Likewise, when the class Archive
-    // is a type of input archive the & operator is defined similar to >>.
-    template<class Archive>
-    void serialize(Archive & ar, const unsigned int version)
-    {
-        ar & board;
-        ar & opIdx;
-		ar & myIdx;
-    }
 };
 
 
@@ -194,18 +185,6 @@ struct HashEntry
 	// so it should be checked before sorting/shuffling
 	char depth;
 	
-	
-    friend class boost::serialization::access;
-    // When the class Archive corresponds to an output archive, the
-    // & operator is defined similar to <<.  Likewise, when the class Archive
-    // is a type of input archive the & operator is defined similar to >>.
-    template<class Archive>
-    void serialize(Archive & ar, const unsigned int version)
-    {
-        ar & scoreType;
-        ar & score;
-		ar & depth;
-    }
 };
 
 namespace std {
@@ -282,10 +261,11 @@ struct by_closeness
 string me, op, block = "|||";
 
 char connCompSplitDepth = numeric_limits<char>::max();
+bool splitBoards = false;
 
 vector<Node> moves;
 
-NodeMap transpos;
+NodeMap transpos(8000000);
 //
 //-----------------------------------------------------------------------------
 
@@ -316,7 +296,9 @@ int connect_comp( const Node &node, bool &opWithMe, const char &player)
 		for (i = 0; i < sizeof(DIRECTIONS); i++)
 		{
 			newPos = pos + DIRECTIONS[i];
-			if (m[newPos] || newPos < 0 || newPos >= BOARDSIZE)
+			if (m[newPos] || newPos < 0 || newPos >= BOARDSIZE
+				|| (newPos % ROWSIZE == ROWSIZE - 1 && i <= 2)
+				|| (newPos % ROWSIZE == 0 && (i > 2 && i <= 5)))
 				continue;
 			
 			m[newPos] = true;
@@ -353,7 +335,9 @@ bool op_same_comp( const Node &node)
 		for (i = 0; i < sizeof(DIRECTIONS); i++)
 		{
 			newPos = pos + DIRECTIONS[i];
-			if (m[newPos] || newPos < 0 || newPos >= BOARDSIZE)
+			if (m[newPos] || newPos < 0 || newPos >= BOARDSIZE
+				|| (newPos % ROWSIZE == ROWSIZE - 1 && i <= 2)
+				|| (newPos % ROWSIZE == 0 && (i > 2 && i <= 5)))
 				continue;
 			
 			m[newPos] = true;
@@ -366,8 +350,6 @@ bool op_same_comp( const Node &node)
 				n++;
 			}
 		}
-		if (n == BOARDSIZE - node.board.count())
-			break;
 	}
 	
 	
@@ -383,7 +365,7 @@ int evaluate_node( const Node &node )
 		if (node.board.count() > CONNCOMPLIMIT)
 		{
 			bool opWithMe = false;
-			if (node.board.count() < connCompSplitDepth)
+			if (!splitBoards)
 			{
 				opWithMe = op_same_comp(node);
 			}
@@ -391,6 +373,8 @@ int evaluate_node( const Node &node )
 			{
 				int mySpace = connect_comp(node, opWithMe, MY);
 				int opSpace = connect_comp(node, opWithMe, OP);
+//				cerr << "\tmyspace: " << mySpace
+//				<< "\topspace: " << opSpace << "\t" << node <<endl;
 				
 				return const_cast<Node &>(node).heuristic =
 				(opSpace == 0) ? MAXINT + mySpace:
@@ -717,14 +701,8 @@ Node search_root(Node &initNode, int &alpha)
 	sort(children.begin(), children.end(), by_max());
 	// random_shuffle(children.begin(),children.end());
 	
-	if (initNode.board.count() < connCompSplitDepth)
-	{
-		bool opWithMe = op_same_comp(initNode);
-		if(!opWithMe)
-		{
-			connCompSplitDepth = initNode.board.count();
-		}
-	}
+	if (!splitBoards)
+		splitBoards = !op_same_comp(initNode);
 	
 	int i = 0, d = 0, value, beta = MAXINT, bestIdx = 0, lastIdx = 0;
 	for(; d < MAXDEPTH ; d += 2)
@@ -788,13 +766,13 @@ Node search_root(Node &initNode, int &alpha)
 		tv = diff(begin, tmp);
 		cerr << "time: " << display_time( tv )
 		<< "\tdepth:" << d << endl <<endl;
-		tv = diff(tmp, end);
-		if( tv.tv_sec < EARLYCUTOFF)
-		{
-			cerr << "early cuttoff:\t" << tv.tv_sec
-			<< "\t" << (long)MAXSECS/4 << endl;
-			break;
-		}
+//		tv = diff(tmp, end);
+//		if( tv.tv_sec < EARLYCUTOFF)
+//		{
+//			cerr << "early cuttoff:\t" << tv.tv_sec
+//			<< "\t" << (long)MAXSECS/4 << endl;
+//			break;
+//		}
 	}
 	
 	gettimeofday(&tv, NULL);
@@ -893,6 +871,7 @@ int alpha_beta_transpo(Node &node, int alpha, int beta, const char *player,
 bool lookup(const Node &node, HashEntry &entry)
 {
 	NodeMap::const_iterator got = transpos.find(node);
+//	NodeMap::const_iterator got = transpos.find(hash<Node>()(node));
 	if( got == transpos.end())
 		return false;
 	else
@@ -910,6 +889,7 @@ void store(const Node &node, const char &scoreType,
 	entry.score = score;
 	entry.depth = depth;
 	transpos[node] = entry;
+//	transpos[hash<Node>()(node)] = entry;
 }
 
 
@@ -996,7 +976,7 @@ bool play( Node &curNode )
 		// cout << "playloop:" <<endl;
 		cout <<"before: "<< curNode <<endl << endl;
 		
-		if ( alpha > CLOSEDCOMPONENT )
+//		if ( alpha > CLOSEDCOMPONENT )
 			alpha = MININT;
 		
 		curNode = search_root(curNode, alpha);
@@ -1027,10 +1007,8 @@ bool play( Node &curNode )
 
 void serialize_table(string &filename)
 {
-    std::ofstream ofs(filename);
-	boost::archive::text_oarchive oa(ofs);
-	
-	oa << transpos;
+//    std::ofstream ofs(filename);
+//	transpos.serialize(<#ValueSerializer serializer#>, ofs);
 	
 }
 
@@ -1044,7 +1022,8 @@ int main(int argc, char *argv[])
 	 *	and player is [1 or 2] representing the player this instance is
 	 *
 	 */
-	transpos.reserve(100000000);
+	// only needed for dense hashmap
+//	transpos.set_empty_key(Node());
 	
 	char playerNum;
 	string filename;
@@ -1083,34 +1062,34 @@ int main(int argc, char *argv[])
 	
 	
 	//TESTING/////////
-
-	myIdx = TOIDX(6, 6);
-	opIdx = TOIDX(7, 6);
-	me = "*X*";
-	op = "*O*";
-
-	board.set(myIdx, 1);
-	board.set(opIdx, 1);
-	board.set(TOIDX(0, 0), 1);
-	board.set(TOIDX(ROWSIZE-1, ROWSIZE-1), 1);
-	board.set(TOIDX(1, 4), 1);
-	board.set(TOIDX(1, 6), 1);
-	board.set(TOIDX(2, 2), 1);
-	board.set(TOIDX(2, 3), 1);
-	board.set(TOIDX(2, 4), 1);
-	board.set(TOIDX(2, 5), 1);
-	board.set(TOIDX(2, 6), 1);
-	board.set(TOIDX(2, 7), 1);
-	board.set(TOIDX(3, 1), 1);
-	board.set(TOIDX(3, 5), 1);
-	board.set(TOIDX(3, 6), 1);
-	board.set(TOIDX(3, 7), 1);
-	board.set(TOIDX(4, 2), 1);
-	board.set(TOIDX(4, 3), 1);
-	board.set(TOIDX(4, 6), 1);
-	board.set(TOIDX(5, 4), 1);
-	board.set(TOIDX(5, 5), 1);
-	board.set(TOIDX(6, 7), 1);
+//
+//	myIdx = TOIDX(6, 6);
+//	opIdx = TOIDX(7, 6);
+//	me = "*X*";
+//	op = "*O*";
+//
+//	board.set(myIdx, 1);
+//	board.set(opIdx, 1);
+//	board.set(TOIDX(0, 0), 1);
+//	board.set(TOIDX(ROWSIZE-1, ROWSIZE-1), 1);
+//	board.set(TOIDX(1, 4), 1);
+//	board.set(TOIDX(1, 6), 1);
+//	board.set(TOIDX(2, 2), 1);
+//	board.set(TOIDX(2, 3), 1);
+//	board.set(TOIDX(2, 4), 1);
+//	board.set(TOIDX(2, 5), 1);
+//	board.set(TOIDX(2, 6), 1);
+//	board.set(TOIDX(2, 7), 1);
+//	board.set(TOIDX(3, 1), 1);
+//	board.set(TOIDX(3, 5), 1);
+//	board.set(TOIDX(3, 6), 1);
+//	board.set(TOIDX(3, 7), 1);
+//	board.set(TOIDX(4, 2), 1);
+//	board.set(TOIDX(4, 3), 1);
+//	board.set(TOIDX(4, 6), 1);
+//	board.set(TOIDX(5, 4), 1);
+//	board.set(TOIDX(5, 5), 1);
+//	board.set(TOIDX(6, 7), 1);
 	
 	
 	Node initNode (board, myIdx, opIdx);
@@ -1146,58 +1125,6 @@ int main(int argc, char *argv[])
 
 
 
-
-
-
-int alpha_beta(Node &node, int alpha, int beta, const char *player,
-			   const timeval &end, char depth)
-{
-	// for(int i = 1; i <= depth; i += 3)
-	// 	cerr << " ";
-	// cerr << "d:" << depth << "\t" << node << "\t\n\tend: " << display_time(end) << "\n";
-	
-	
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	if( past_time(tv, end) )
-		throw "Ran out of time";
-	
-	if(game_over(node) || depth == 0)
-	{
-		// cerr << "\t\tleafNode:\t" << node<< endl;
-		return evaluate_node(node) * *player;
-	}
-	
-	// cerr << endl;
-	
-	vector<Node> children;
-	char numKids = get_children(node, children, player);
-	//	sort(children.begin(), children.end(), by_max());
-	random_shuffle(children.begin(),children.end());
-	
-	int i = 0, value = MININT;
-	for ( ; i < numKids; i++)
-	{
-		value = MAX(value,
-					-1*(alpha_beta(children[i],
-								   -1 * beta,
-								   -1 * alpha,
-								   (*player == MY) ? &OP : &MY,
-								   end,
-								   depth - 1)));
-		// cerr << "\t\tresult: " << result <<endl;
-		
-		if( value >= beta)
-		{
-			return beta;
-		}
-		
-		if( value > alpha)
-			alpha = value;
-	}
-	// cerr << "alpha:\t" << alpha << endl;
-	return alpha;
-}
 
 
 
