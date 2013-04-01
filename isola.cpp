@@ -890,14 +890,14 @@ int alpha_beta_transpo(Node &node, int alpha, int beta, const char *player,
 
 
 
-bool lookup(const Node &node, HashEntry *entry)
+bool lookup(const Node &node, HashEntry &entry)
 {
 	NodeMap::const_iterator got = transpos.find(node);
 	if( got == transpos.end())
 		return false;
 	else
 	{
-		*entry = got->second;
+		entry = got->second;
 		return true;
 	}
 }
