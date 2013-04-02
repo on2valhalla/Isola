@@ -965,22 +965,25 @@ bool play( Node &curNode )
 	
 	while( myMoves > 0)
 	{
-		// cout << "playloop:" <<endl;
-		cout <<"before: "<< curNode <<endl << endl;
+//		cout << "playloop:" <<endl;
+//		cout <<"before: "<< curNode <<endl << endl;
 		
 //		if ( alpha > CLOSEDCOMPONENT )
 		alpha = MININT;
 		
 		curNode = search_root(curNode, alpha);
 		
-		cout <<"after: "<< curNode <<"\ttranspo: "<< transpos.size()
-			<<"\tbuckets: "<< transpos.bucket_count()
-			<<endl << endl <<endl;
+//		cout <<"after: "<< curNode <<"\ttranspo: "<< transpos.size()
+//			<<"\tbuckets: "<< transpos.bucket_count()
+//			<<endl << endl <<endl;
 		
 		cout << "\n\n";
 		draw_board(curNode);
 		cout << "\n\n";
 		
+		
+		cout << "I MOVE TO:  (" << GETY(curNode.myIdx)
+		<< " " << GETX(curNode.myIdx) << endl;
 		
 		if(evaluate_node(curNode) == MININT)
 			return false;
