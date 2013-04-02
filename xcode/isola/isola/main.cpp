@@ -101,8 +101,8 @@ struct by_closeness;
 
 
 typedef bitset<BOARDSIZE> BitBoard;
-//typedef unordered_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
-typedef google::dense_hash_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
+typedef unordered_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
+//typedef google::dense_hash_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
 //typedef google::sparse_hash_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
 //typedef unordered_map<size_t, HashEntry> NodeMap;
 //typedef google::dense_hash_map<size_t, HashEntry> NodeMap;
@@ -1071,7 +1071,7 @@ int main(int argc, char *argv[])
 	 *
 	 */
 	// only needed for dense hashmap
-	transpos.set_empty_key(Node());
+//	transpos.set_empty_key(Node());
 	
 	char playerNum;
 	string filename;
