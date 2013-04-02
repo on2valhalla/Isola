@@ -25,14 +25,14 @@
 #include <algorithm>	/* heap functions */
 //#include <boost/serialization/serialization.hpp>
 //#include <boost/serialization/map.hpp>
-#include <boost/serialization/bitset.hpp>
+//#include <boost/serialization/bitset.hpp>
 //#include <boost/serialization/unordered_map.hpp>
 //#include <boost/serialization/dense_hash_map.hpp>
 //#include <boost/serialization/sparse_hash_map.hpp>
-#include "dense_hash_map.hpp"
+//#include "dense_hash_map.hpp"
 //#include "sparse_hash_map.hpp"
-#include <boost/archive/text_oarchive.hpp>
-#include <boost/archive/text_iarchive.hpp>
+//#include <boost/archive/text_oarchive.hpp>
+//#include <boost/archive/text_iarchive.hpp>
 //#include <google/dense_hash_map>
 //#include <google/sparse_hash_map>
 #include "sparsehash/dense_hash_map"
@@ -186,18 +186,18 @@ public:
 		return o;
 	}
 	
-	
-    friend class boost::serialization::access;
-    // When the class Archive corresponds to an output archive, the
-    // & operator is defined similar to <<.  Likewise, when the class Archive
-    // is a type of input archive the & operator is defined similar to >>.
-    template<class Archive>
-    void serialize(Archive & ar, const unsigned int version)
-    {
-        ar & board;
-        ar & myIdx;
-        ar & opIdx;
-    }
+//	
+//    friend class boost::serialization::access;
+//    // When the class Archive corresponds to an output archive, the
+//    // & operator is defined similar to <<.  Likewise, when the class Archive
+//    // is a type of input archive the & operator is defined similar to >>.
+//    template<class Archive>
+//    void serialize(Archive & ar, const unsigned int version)
+//    {
+//        ar & board;
+//        ar & myIdx;
+//        ar & opIdx;
+//    }
 };
 
 
@@ -209,19 +209,19 @@ struct HashEntry
 	// so it should be checked before sorting/shuffling
 	char depth;
 	
-	
-    friend class boost::serialization::access;
-    // When the class Archive corresponds to an output archive, the
-    // & operator is defined similar to <<.  Likewise, when the class Archive
-    // is a type of input archive the & operator is defined similar to >>.
-    template<class Archive>
-    void serialize(Archive & ar, const unsigned int version)
-    {
-        ar & scoreType;
-        ar & score;
-        ar & depth;
-    }
-	
+//	
+//    friend class boost::serialization::access;
+//    // When the class Archive corresponds to an output archive, the
+//    // & operator is defined similar to <<.  Likewise, when the class Archive
+//    // is a type of input archive the & operator is defined similar to >>.
+//    template<class Archive>
+//    void serialize(Archive & ar, const unsigned int version)
+//    {
+//        ar & scoreType;
+//        ar & score;
+//        ar & depth;
+//    }
+//	
 };
 
 namespace std {
@@ -930,28 +930,28 @@ void store(const Node &node, const char &scoreType,
 }
 
 
-
-
-void serialize_table(string &filename)
-{
-    std::ofstream ofs(filename);
-    // save data to archive
-	boost::archive::text_oarchive oa(ofs);
-	// write class instance to archive
-	oa << transpos;
-	
-}
-void read_table(string &filename)
-{
-    std::ifstream ifs(filename);
-    // save data to archive
-	boost::archive::text_iarchive ia(ifs);
-	// write class instance to archive
-	ia >> transpos;
-}
-
-
-
+//
+//
+//void serialize_table(string &filename)
+//{
+//    std::ofstream ofs(filename);
+//    // save data to archive
+//	boost::archive::text_oarchive oa(ofs);
+//	// write class instance to archive
+//	oa << transpos;
+//	
+//}
+//void read_table(string &filename)
+//{
+//    std::ifstream ifs(filename);
+//    // save data to archive
+//	boost::archive::text_iarchive ia(ifs);
+//	// write class instance to archive
+//	ia >> transpos;
+//}
+//
+//
+//
 
 
 
@@ -1084,9 +1084,9 @@ int main(int argc, char *argv[])
 		string read;
 		cout << "do you want to read from file (y/n):  ";
 		getline(cin, read);
-		
-		if (read == "y")
-			read_table(filename);
+//		
+//		if (read == "y")
+//			read_table(filename);
 		
 	}
 	catch (int e)
@@ -1173,7 +1173,7 @@ int main(int argc, char *argv[])
 	else
 		cout << ":( :(  You win  :( :(" << endl;
 	
-	serialize_table(filename);
+//	serialize_table(filename);
 	// completed sucessfully
 	return 0;
 }
