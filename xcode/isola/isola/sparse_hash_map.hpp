@@ -17,7 +17,8 @@
 
 //  See http://www.boost.org for updates, documentation, and revision history.
 
-#include <google/sparse_hash_map>
+// #include <google/sparse_hash_map>
+#include "sparsehash/sparse_hash_map"
 
 #include <boost/config.hpp>
 
