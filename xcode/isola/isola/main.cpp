@@ -752,8 +752,8 @@ Node search_root(Node &initNode, int &alpha)
 		
 		lastIdx = bestIdx;
 		i = 0;
-		alpha *= .9;
-		//		alpha = MININT;
+	//	alpha *= .9;
+		alpha = MININT;
 		
 		gettimeofday(&tmp, NULL);
 		tv = diff(begin, tmp);
