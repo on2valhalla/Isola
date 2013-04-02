@@ -63,7 +63,7 @@
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "transpos.dat"
+            argument = "y"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

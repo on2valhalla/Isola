@@ -952,7 +952,7 @@ bool take_move( Node &node, int &alpha)
 bool make_move( Node &node, char player)
 {
 	// cout << "take:" <<endl;
-	char newIdx = 0, myMoves = 0, opMoves = 0;
+	char newIdx = 0, myMoves = 0, opMoves = 0, localPlayer = player;
 	fast_children_both(node, &myMoves, &opMoves);
 	
 	//	cout << "numKids Op: " << (int) n << endl;
@@ -981,7 +981,7 @@ bool make_move( Node &node, char player)
 			continue;
 		}
 		
-		char *curIdx = (player == MY) ? &node.myIdx : &node.opIdx;
+		char *curIdx = (localPlayer == MY) ? &node.myIdx : &node.opIdx;
 		
 		size_t y = move.find_first_of("12345678");
 		size_t x = move.find_first_of("12345678", y+1);
@@ -999,11 +999,16 @@ bool make_move( Node &node, char player)
 			continue;
 		}
 		
-		moves.push_back(node);
 		*curIdx = newIdx;
 		node.board.set(newIdx, 1);
-		
+		moves.push_back(node);
+		draw_board(node);
+		localPlayer *= -1;
 	}
+	
+	int fakealpha;
+	if (player != localPlayer)
+		take_move(node, fakealpha);
 	
 	// success
 	opMoves = 0;
@@ -1081,9 +1086,9 @@ int main(int argc, char *argv[])
 //	string filename;
 	try
 	{ // take in command line argument
-		assert(argc == 3);
+		assert(argc > 2);
 		playerNum = argv[1][0] - '0';
-		makemove = argv[2][0];
+//		makemove = argv[2][0];
 		
 //		filename = argv[2];
 //
@@ -1158,7 +1163,12 @@ int main(int argc, char *argv[])
 	cerr << initNode << endl;
 	moves.push_back(initNode);
 	
-	if (makemove == 'y')
+	string makeMove;
+	cout << "Please enter a move (row col):  ";
+	getline(cin, makeMove);
+	
+	size_t begin = makeMove.find_first_of("y");
+	if (begin != string::npos)
 	{
 		make_move(initNode, (playerNum == 1) ? MY : OP);
 	}
