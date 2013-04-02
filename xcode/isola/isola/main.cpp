@@ -35,7 +35,7 @@
 //#include <boost/archive/text_iarchive.hpp>
 //#include <google/dense_hash_map>
 //#include <google/sparse_hash_map>
-#include "sparsehash/dense_hash_map"
+//#include "sparsehash/dense_hash_map"
 
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
@@ -115,7 +115,6 @@ int draw_board(const Node&);
 
 string display_time( const timeval &tv );
 timeval add_time( const timeval &tv, const int *seconds);
-void add_time( timeval &to, const timeval &add);
 bool past_time(const timeval &cur, const timeval &end);
 timeval diff(const timeval &start, const timeval &end);
 
@@ -125,7 +124,6 @@ int evaluate_node( const Node &node );
 bool valid_move( const BitBoard&, const char*, const char*);
 
 char get_children( const Node&,	vector<Node>&, const char* player);
-char fast_children(const Node&, const char*);
 char fast_children_both(const Node &node, char *myMoves, char *opMoves);
 
 
@@ -315,6 +313,175 @@ NodeMap transpos(30000000);
 
 
 
+int usage()
+{
+	cout << "USAGE: $ isola PLAYER\n" <<
+	"Where PLAYER is [1/2] representing "<<
+	"the player this instance is"<< endl;
+	return 1;
+}
+
+bool game_over(const Node &node)
+{
+	int v = evaluate_node(node);
+	if(v == MAXINT || v == MININT)
+		return true;
+	else
+		return false;
+}
+
+Node undo_last()
+{
+	Node prevNode = moves.back();
+	moves.pop_back();
+	return prevNode;
+}
+
+// Draws a Isola board represented by a bitset, when supplied
+// with the bitset and two current positions as indexes in the bitset
+int draw_board(const Node &node)
+{
+	// cout << "A represents me, B represents you, X a visited space\n\n";
+	// cout << "draw:" <<endl;
+	
+	char i, j, idx;
+	cout << "\n\n   |";
+	for ( i = 1; i <= ROWSIZE; i++ )
+		cout << " " << (int)i << " |";
+	cout<< endl <<"___";
+	for ( i = 0; i < ROWSIZE; i++ )
+		cout << "____";
+	
+	cout << "_" << endl;
+	
+	for ( i = 0; i < ROWSIZE; i++ )
+	{
+		cout << " " << (int)i+1 << " |";
+		
+		for ( j = 0; j < ROWSIZE; j++ )
+		{
+			// get idxs for the bitset *MACRO* (col, row)
+			idx = TOIDX(i, j);
+			
+			if( idx == node.myIdx )			cout << me;
+			else if( idx == node.opIdx )	cout << op;
+			else if( node.board[idx] )		cout << block;
+			else 						cout << "   ";
+			// else if(idx < 10)
+			// 	cout << " " << (int)idx << " ";
+			// else
+			// 	cout << " " << (int)idx;
+			
+			cout << "|";
+		}
+		
+		if (i < ROWSIZE -1)
+		{
+			cout << endl << "---|";
+			
+			for ( j = 0; j < ROWSIZE; j++ )
+				cout << "———";
+			
+			cout << "———————|";
+		}
+		
+		cout << endl;
+	}
+	
+	cout << "---|";
+	
+	for ( i = 0; i < ROWSIZE; i++ )
+		cout << "———";
+	
+	cout << "———————|\n\nMove: " << node.board.count() -2 << endl;
+	
+	return 0;
+}
+
+timeval diff(const timeval &start, const timeval &end)
+{
+	timeval temp;
+	if ((end.tv_usec-start.tv_usec)<0) {
+		temp.tv_sec = end.tv_sec-start.tv_sec-1;
+		temp.tv_usec = 1000000+end.tv_usec-start.tv_usec;
+	} else {
+		temp.tv_sec = end.tv_sec-start.tv_sec;
+		temp.tv_usec = end.tv_usec-start.tv_usec;
+	}
+	return temp;
+}
+
+bool past_time(const timeval &cur, const timeval &end)
+{
+	timeval tmp = diff(cur, end);
+	long t = tmp.tv_sec*1000000 + tmp.tv_usec;
+	// cerr << t << "\tcur: " << display_time(cur) << "\tend: "
+	// 				<< display_time(end) <<"\ttmp: " << display_time(tmp) <<endl;
+	return t <= 0;
+}
+
+timeval add_time( const timeval &tv, const int *seconds)
+{
+	timeval temp;
+	temp.tv_sec = tv.tv_sec + *seconds;
+	temp.tv_usec = tv.tv_usec;
+	return temp;
+}
+
+string display_time( const timeval &tv )
+{
+	std::string number;
+	std::stringstream strstream;
+	strstream << tv.tv_sec << "." << tv.tv_usec << " seconds";
+	strstream >> number;
+	return number;
+}
+
+
+
+
+
+
+
+bool valid_move( const BitBoard &board, const char *oldIdx,
+				const char *moveIdx )
+{
+	// cout << "valid:" <<endl;
+	char curIdx = *oldIdx;
+	
+	// check if given position is off the board or visited
+	if ( *moveIdx >= BOARDSIZE || *moveIdx < 0 || board[*moveIdx] )
+		return false; // to-position is invalid
+	
+	// get vectors representing the entire move and direction
+	char x = GETX(*moveIdx) - GETX(curIdx);
+	char y = GETY(*moveIdx) - GETY(curIdx);
+	char moveVec[2] = { y, x };
+	char moveIncr = TOIDX( SIGN(moveVec[0]), SIGN(moveVec[1]) );
+	
+	if( abs(moveIncr) == 1 || abs(moveIncr) == ROWSIZE
+	   || abs(moveIncr) == ROWSIZE - 1 || abs(moveIncr) == ROWSIZE + 1)
+	{ // horizontal or vertical move
+		while (curIdx != *moveIdx)
+		{
+			// move to the next position
+			curIdx += moveIncr;
+			
+			// check if the position is visited
+			if( board[curIdx] )
+				return false;
+		}
+	}
+	else
+		return false; //invalid move
+	
+	// valid move
+	return true;
+}
+
+
+
+
 int connect_comp( const Node &node, bool &opWithMe, const char &player)
 {
 	char pos, newPos,
@@ -410,8 +577,8 @@ int evaluate_node( const Node &node )
 			{
 				int mySpace = connect_comp(node, opWithMe, MY);
 				int opSpace = connect_comp(node, opWithMe, OP);
-//				cerr << "\tmyspace: " << mySpace
-//				<< "\topspace: " << opSpace << "\t" << node <<endl;
+				//				cerr << "\tmyspace: " << mySpace
+				//				<< "\topspace: " << opSpace << "\t" << node <<endl;
 				
 				return const_cast<Node &>(node).heuristic =
 				(opSpace == 0) ? MAXINT + mySpace:
@@ -431,190 +598,6 @@ int evaluate_node( const Node &node )
 	}
 	return node.heuristic;
 }
-
-int usage()
-{
-	cout << "USAGE: $ isola PLAYER\n" <<
-	"Where PLAYER is [1/2] representing "<<
-	"the player this instance is"<< endl;
-	return 1;
-}
-
-bool game_over(const Node &node)
-{
-	int v = evaluate_node(node);
-	if(v == MAXINT || v == MININT)
-		return true;
-	else
-		return false;
-}
-
-Node undo_last()
-{
-	Node prevNode = moves.back();
-	moves.pop_back();
-	return prevNode;
-}
-
-
-
-
-timeval diff(const timeval &start, const timeval &end)
-{
-	timeval temp;
-	if ((end.tv_usec-start.tv_usec)<0) {
-		temp.tv_sec = end.tv_sec-start.tv_sec-1;
-		temp.tv_usec = 1000000+end.tv_usec-start.tv_usec;
-	} else {
-		temp.tv_sec = end.tv_sec-start.tv_sec;
-		temp.tv_usec = end.tv_usec-start.tv_usec;
-	}
-	return temp;
-}
-
-bool past_time(const timeval &cur, const timeval &end)
-{
-	timeval tmp = diff(cur, end);
-	long t = tmp.tv_sec*1000000 + tmp.tv_usec;
-	// cerr << t << "\tcur: " << display_time(cur) << "\tend: "
-	// 				<< display_time(end) <<"\ttmp: " << display_time(tmp) <<endl;
-	return t <= 0;
-}
-
-timeval add_time( const timeval &tv, const int *seconds)
-{
-	timeval temp;
-	temp.tv_sec = tv.tv_sec + *seconds;
-	temp.tv_usec = tv.tv_usec;
-	return temp;
-}
-
-void add_time( timeval &to, const timeval &add)
-{
-	to.tv_sec += add.tv_sec;
-	to.tv_usec += add.tv_usec;
-	if( to.tv_usec >= 1000000)
-	{
-		to.tv_usec -= 1000000;
-		to.tv_sec++;
-	}
-}
-
-string display_time( const timeval &tv )
-{
-	std::string number;
-	std::stringstream strstream;
-	strstream << tv.tv_sec << "." << tv.tv_usec << " seconds";
-	strstream >> number;
-	return number;
-}
-
-
-
-
-
-
-
-bool valid_move( const BitBoard &board, const char *oldIdx,
-				const char *moveIdx )
-{
-	// cout << "valid:" <<endl;
-	char curIdx = *oldIdx;
-	
-	// check if given position is off the board or visited
-	if ( *moveIdx >= BOARDSIZE || *moveIdx < 0 || board[*moveIdx] )
-		return false; // to-position is invalid
-	
-	// get vectors representing the entire move and direction
-	char x = GETX(*moveIdx) - GETX(curIdx);
-	char y = GETY(*moveIdx) - GETY(curIdx);
-	char moveVec[2] = { y, x };
-	char moveIncr = TOIDX( SIGN(moveVec[0]), SIGN(moveVec[1]) );
-	
-	if( abs(moveIncr) == 1 || abs(moveIncr) == ROWSIZE
-	   || abs(moveIncr) == ROWSIZE - 1 || abs(moveIncr) == ROWSIZE + 1)
-	{ // horizontal or vertical move
-		while (curIdx != *moveIdx)
-		{
-			// move to the next position
-			curIdx += moveIncr;
-			
-			// check if the position is visited
-			if( board[curIdx] )
-				return false;
-		}
-	}
-	else
-		return false; //invalid move
-	
-	// valid move
-	return true;
-}
-
-
-// Draws a Isola board represented by a bitset, when supplied
-// with the bitset and two current positions as indexes in the bitset
-int draw_board(const Node &node)
-{
-	// cout << "A represents me, B represents you, X a visited space\n\n";
-	// cout << "draw:" <<endl;
-	
-	char i, j, idx;
-	cout << "\n\n   |";
-	for ( i = 1; i <= ROWSIZE; i++ )
-		cout << " " << (int)i << " |";
-	cout<< endl <<"___";
-	for ( i = 0; i < ROWSIZE; i++ )
-		cout << "____";
-	
-	cout << "_" << endl;
-	
-	for ( i = 0; i < ROWSIZE; i++ )
-	{
-		cout << " " << (int)i+1 << " |";
-		
-		for ( j = 0; j < ROWSIZE; j++ )
-		{
-			// get idxs for the bitset *MACRO* (col, row)
-			idx = TOIDX(i, j);
-			
-			if( idx == node.myIdx )			cout << me;
-			else if( idx == node.opIdx )	cout << op;
-			else if( node.board[idx] )		cout << block;
-			else 						cout << "   ";
-			// else if(idx < 10)
-			// 	cout << " " << (int)idx << " ";
-			// else
-			// 	cout << " " << (int)idx;
-			
-			cout << "|";
-		}
-		
-		if (i < ROWSIZE -1)
-		{
-			cout << endl << "---|";
-			
-			for ( j = 0; j < ROWSIZE; j++ )
-				cout << "———";
-			
-			cout << "———————|";
-		}
-		
-		cout << endl;
-	}
-	
-	cout << "---|";
-	
-	for ( i = 0; i < ROWSIZE; i++ )
-		cout << "———";
-	
-	cout << "———————|\n\nMove: " << node.board.count() -2 << endl;
-	
-	return 0;
-}
-
-
-
 
 char get_children( const Node &node,
 				  vector<Node> &children,
@@ -653,32 +636,6 @@ char get_children( const Node &node,
 	return n;
 }
 
-char fast_children(const Node &node, const char *player)
-{
-	// cout << "getc:" <<endl;
-	// number of children found
-	unsigned char n = 0, i = 0;
-	char fromIdx = (*player == MY) ? node.myIdx : node.opIdx,
-	curIdx;
-	
-	for ( ; i < sizeof(DIRECTIONS); i++) {
-		// cout << "fastm:" <<endl;
-		curIdx = fromIdx + DIRECTIONS[i];
-		// cout << curIdx << endl;
-		while ( curIdx >= 0 && curIdx < BOARDSIZE && !node.board[curIdx] )
-		{
-			
-			if(	(curIdx % ROWSIZE == ROWSIZE - 1 && i <= 2)
-			   || (curIdx % ROWSIZE == 0 && (i > 2 && i <= 5)))
-				break; //edge of table reached
-			
-			n++;
-			curIdx += DIRECTIONS[i];
-		}
-	}
-	
-	return n;
-}
 
 char fast_children_both(const Node &node, char *myMoves, char *opMoves)
 {
@@ -725,57 +682,6 @@ char fast_children_both(const Node &node, char *myMoves, char *opMoves)
 
 
 
-int alpha_beta(Node &node, int alpha, int beta, const char *player,
-			   const timeval &end, char depth)
-{
-	// for(int i = 1; i <= depth; i += 3)
-	// 	cerr << " ";
-	// cerr << "d:" << depth << "\t" << node << "\t\n\tend: " << display_time(end) << "\n";
-	
-	
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	if( past_time(tv, end) )
-		throw "Ran out of time";
-	
-	if(game_over(node) || depth == 0)
-	{
-		// cerr << "\t\tleafNode:\t" << node<< endl;
-		return evaluate_node(node) * *player;
-	}
-	
-	// cerr << endl;
-	
-	vector<Node> children;
-	char numKids = get_children(node, children, player);
-	//	sort(children.begin(), children.end(), by_max());
-	random_shuffle(children.begin(),children.end());
-	
-	int i = 0, value = MININT;
-	for ( ; i < numKids; i++)
-	{
-		value = MAX(value,
-					-1*(alpha_beta(children[i],
-								   -1 * beta,
-								   -1 * alpha,
-								   (*player == MY) ? &OP : &MY,
-								   end,
-								   depth - 1)));
-		// cerr << "\t\tresult: " << result <<endl;
-		
-		if( value >= beta)
-		{
-			return beta;
-		}
-		
-		if( value > alpha)
-			alpha = value;
-	}
-	// cerr << "alpha:\t" << alpha << endl;
-	return alpha;
-}
-
-
 
 Node search_root(Node &initNode, int &alpha)
 {
@@ -799,18 +705,18 @@ Node search_root(Node &initNode, int &alpha)
 		try{
 			for (; i < numKids; i++)
 			{
-				value = -1 * alpha_beta(children[i],
-										-1*beta,
-										-1*alpha,
-										&OP,
-										end,
-										d);
-//				value = -1 * alpha_beta_transpo(children[i],
-//												-1*beta,
-//												-1*alpha,
-//												&OP,
-//												end,
-//												d);
+//				value = -1 * alpha_beta(children[i],
+//										-1*beta,
+//										-1*alpha,
+//										&OP,
+//										end,
+//										d);
+				value = -1 * alpha_beta_transpo(children[i],
+												-1*beta,
+												-1*alpha,
+												&OP,
+												end,
+												d);
 				
 				cerr << "last: " << value
 				<< "  pos: " << GETY((int)children[i].myIdx) << ","
@@ -982,31 +888,6 @@ void store(const Node &node, const char &scoreType,
 }
 
 
-//
-//
-//void serialize_table(string &filename)
-//{
-//    std::ofstream ofs(filename);
-//    // save data to archive
-//	boost::archive::text_oarchive oa(ofs);
-//	// write class instance to archive
-//	oa << transpos;
-//	
-//}
-//void read_table(string &filename)
-//{
-//    std::ifstream ifs(filename);
-//    // save data to archive
-//	boost::archive::text_iarchive ia(ifs);
-//	// write class instance to archive
-//	ia >> transpos;
-//}
-//
-//
-//
-
-
-
 
 
 
@@ -1014,11 +895,11 @@ void store(const Node &node, const char &scoreType,
 bool take_move( Node &node, int &alpha)
 {
 	// cout << "take:" <<endl;
-	char newIdx = 0,
-	n = fast_children(node, &OP);
+	char newIdx = 0, myMoves = 0, opMoves = 0;
+	fast_children_both(node, &myMoves, &opMoves);
 	
 	//	cout << "numKids Op: " << (int) n << endl;
-	while( n != 0 )
+	while( opMoves != 0 )
 	{
 		string move;
 		cout << "Please enter a move (row col):  ";
@@ -1061,8 +942,9 @@ bool take_move( Node &node, int &alpha)
 	}
 	
 	// success
-	n = fast_children(node, &OP);
-	if(n == 0)
+	opMoves = 0;
+	fast_children_both(node, &myMoves, &opMoves);
+	if(opMoves == 0)
 		return false;
 	return true;
 }
@@ -1078,19 +960,22 @@ bool play( Node &curNode )
 	draw_board(curNode);
 	cout << "\n\n";
 	
-	while( fast_children(curNode, &MY) > 0)
+	char myMoves = 0, opMoves = 0;
+	fast_children_both(curNode, &myMoves, &opMoves);
+	
+	while( myMoves > 0)
 	{
 		// cout << "playloop:" <<endl;
 		cout <<"before: "<< curNode <<endl << endl;
 		
 //		if ( alpha > CLOSEDCOMPONENT )
-			alpha = MININT;
+		alpha = MININT;
 		
 		curNode = search_root(curNode, alpha);
 		
 		cout <<"after: "<< curNode <<"\ttranspo: "<< transpos.size()
-		<<"\tbuckets: "<< transpos.bucket_count()
-		<<endl << endl <<endl;
+			<<"\tbuckets: "<< transpos.bucket_count()
+			<<endl << endl <<endl;
 		
 		cout << "\n\n";
 		draw_board(curNode);
