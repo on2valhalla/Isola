@@ -27,12 +27,13 @@
 //#include <boost/serialization/map.hpp>
 #include <boost/serialization/bitset.hpp>
 //#include <boost/serialization/unordered_map.hpp>
-//#include <boost/serialization/dense_hash_map.hpp>
-#include <boost/serialization/sparse_hash_map.hpp>
+#include <boost/serialization/dense_hash_map.hpp>
+//#include <boost/serialization/sparse_hash_map.hpp>
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
-#include <google/dense_hash_map>
-#include <google/sparse_hash_map>
+//#include <google/dense_hash_map>
+//#include <google/sparse_hash_map>
+#include "sparsehash/dense_hash_map"
 
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
@@ -99,8 +100,8 @@ struct by_closeness;
 
 typedef bitset<BOARDSIZE> BitBoard;
 //typedef unordered_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
-//typedef google::dense_hash_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
-typedef google::sparse_hash_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
+typedef google::dense_hash_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
+//typedef google::sparse_hash_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
 //typedef unordered_map<size_t, HashEntry> NodeMap;
 //typedef google::dense_hash_map<size_t, HashEntry> NodeMap;
 //typedef google::sparse_hash_map<size_t, HashEntry> NodeMap;
@@ -299,7 +300,7 @@ bool splitBoards = false;
 
 vector<Node> moves;
 
-NodeMap transpos(8000000);
+NodeMap transpos(10000000);
 //
 //-----------------------------------------------------------------------------
 
@@ -423,7 +424,7 @@ int evaluate_node( const Node &node )
 		
 		return const_cast<Node &>(node).heuristic =
 		(opMoves == 0) ? MAXINT + myMoves:
-		(myMoves == 0) ? MININT + myMoves:
+		(myMoves == 0) ? MININT - opMoves:
 		(myMoves - opMoves*3 + 60) * (int)node.board.count();
 	}
 	return node.heuristic;
@@ -762,8 +763,6 @@ Node search_root(Node &initNode, int &alpha)
 				<< GETX((int)children[i].myIdx);
 				
 				
-				if(value == MAXINT)
-					return children[i];
 				
 				if (value > alpha)
 				{
@@ -778,6 +777,8 @@ Node search_root(Node &initNode, int &alpha)
 				
 			}
 			if(alpha == MININT)
+				return children[bestIdx];
+			if(value >= MAXINT)
 				return children[bestIdx];
 			
 		}catch (...)

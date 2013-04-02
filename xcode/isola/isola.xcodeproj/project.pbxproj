@@ -201,8 +201,9 @@
 					"/usr/local/lib/**",
 				);
 				OTHER_LDFLAGS = (
-					"-lboost_serialization-mt",
-					"-lboost_wserialization-mt",
+					"-lboost_serialization",
+					"-lboost_wserialization",
+					"-lboost_iostreams",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -224,8 +225,9 @@
 					"/usr/local/lib/**",
 				);
 				OTHER_LDFLAGS = (
-					"-lboost_serialization-mt",
-					"-lboost_wserialization-mt",
+					"-lboost_serialization",
+					"-lboost_wserialization",
+					"-lboost_iostreams",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
