@@ -74,7 +74,7 @@ static const char DIRECTIONS[] = { NWEST,
 static const char MY = 1;
 static const char OP = -1;
 static const char MAXDEPTH = 40;
-static const int MAXSECS = 600;
+static const int MAXSECS = 60;
 static const int EARLYCUTOFF = MAXSECS / 4;
 static const int MININT = numeric_limits<int>::min() + 40;
 static const int MAXINT = numeric_limits<int>::max() - 40;
@@ -101,8 +101,8 @@ struct by_closeness;
 
 
 typedef bitset<BOARDSIZE> BitBoard;
-//typedef unordered_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
-typedef google::dense_hash_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
+typedef unordered_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
+//typedef google::dense_hash_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
 //typedef google::sparse_hash_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
 //typedef unordered_map<size_t, HashEntry> NodeMap;
 //typedef google::dense_hash_map<size_t, HashEntry> NodeMap;
@@ -302,7 +302,7 @@ bool splitBoards = false;
 
 vector<Node> moves;
 
-NodeMap transpos(10000000);
+NodeMap transpos(30000000);
 //
 //-----------------------------------------------------------------------------
 
@@ -1071,7 +1071,7 @@ int main(int argc, char *argv[])
 	 *
 	 */
 	// only needed for dense hashmap
-	transpos.set_empty_key(Node());
+//	transpos.set_empty_key(Node());
 	
 	char playerNum;
 	string filename;
@@ -1080,10 +1080,10 @@ int main(int argc, char *argv[])
 		assert(argc == 3);
 		playerNum = argv[1][0] - '0';
 		filename = argv[2];
-		
-		string read;
-		cout << "do you want to read from file (y/n):  ";
-		getline(cin, read);
+//		
+//		string read;
+//		cout << "do you want to read from file (y/n):  ";
+//		getline(cin, read);
 //		
 //		if (read == "y")
 //			read_table(filename);
