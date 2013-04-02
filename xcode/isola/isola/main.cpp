@@ -27,8 +27,10 @@
 //#include <boost/serialization/map.hpp>
 #include <boost/serialization/bitset.hpp>
 //#include <boost/serialization/unordered_map.hpp>
-#include <boost/serialization/dense_hash_map.hpp>
+//#include <boost/serialization/dense_hash_map.hpp>
 //#include <boost/serialization/sparse_hash_map.hpp>
+#include "dense_hash_map.hpp"
+//#include "sparse_hash_map.hpp"
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
 //#include <google/dense_hash_map>
