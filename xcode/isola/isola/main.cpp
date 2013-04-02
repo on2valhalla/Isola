@@ -725,6 +725,58 @@ char fast_children_both(const Node &node, char *myMoves, char *opMoves)
 
 
 
+int alpha_beta(Node &node, int alpha, int beta, const char *player,
+			   const timeval &end, char depth)
+{
+	// for(int i = 1; i <= depth; i += 3)
+	// 	cerr << " ";
+	// cerr << "d:" << depth << "\t" << node << "\t\n\tend: " << display_time(end) << "\n";
+	
+	
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	if( past_time(tv, end) )
+		throw "Ran out of time";
+	
+	if(game_over(node) || depth == 0)
+	{
+		// cerr << "\t\tleafNode:\t" << node<< endl;
+		return evaluate_node(node) * *player;
+	}
+	
+	// cerr << endl;
+	
+	vector<Node> children;
+	char numKids = get_children(node, children, player);
+	//	sort(children.begin(), children.end(), by_max());
+	random_shuffle(children.begin(),children.end());
+	
+	int i = 0, value = MININT;
+	for ( ; i < numKids; i++)
+	{
+		value = MAX(value,
+					-1*(alpha_beta(children[i],
+								   -1 * beta,
+								   -1 * alpha,
+								   (*player == MY) ? &OP : &MY,
+								   end,
+								   depth - 1)));
+		// cerr << "\t\tresult: " << result <<endl;
+		
+		if( value >= beta)
+		{
+			return beta;
+		}
+		
+		if( value > alpha)
+			alpha = value;
+	}
+	// cerr << "alpha:\t" << alpha << endl;
+	return alpha;
+}
+
+
+
 Node search_root(Node &initNode, int &alpha)
 {
 	// set time limit
@@ -747,18 +799,18 @@ Node search_root(Node &initNode, int &alpha)
 		try{
 			for (; i < numKids; i++)
 			{
-				//				value = -1 * alpha_beta(children[i],
-				//										-1*beta,
-				//										-1*alpha,
-				//										&OP,
-				//										end,
-				//										d);
-				value = -1 * alpha_beta_transpo(children[i],
-												-1*beta,
-												-1*alpha,
-												&OP,
-												end,
-												d);
+				value = -1 * alpha_beta(children[i],
+										-1*beta,
+										-1*alpha,
+										&OP,
+										end,
+										d);
+//				value = -1 * alpha_beta_transpo(children[i],
+//												-1*beta,
+//												-1*alpha,
+//												&OP,
+//												end,
+//												d);
 				
 				cerr << "last: " << value
 				<< "  pos: " << GETY((int)children[i].myIdx) << ","
