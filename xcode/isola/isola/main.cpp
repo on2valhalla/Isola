@@ -949,6 +949,70 @@ bool take_move( Node &node, int &alpha)
 	return true;
 }
 
+bool make_move( Node &node, char player)
+{
+	// cout << "take:" <<endl;
+	char newIdx = 0, myMoves = 0, opMoves = 0;
+	fast_children_both(node, &myMoves, &opMoves);
+	
+	//	cout << "numKids Op: " << (int) n << endl;
+	while( true )
+	{
+		string move;
+		cout << "Please enter a move (row col):  ";
+		getline(cin, move);
+		
+		size_t begin = move.find_first_of("#");
+		if (begin != string::npos)
+		{
+			break;
+		}
+		
+		size_t undo = move.find_first_of("$");
+		if (undo != string::npos)
+		{
+			Node prevNode = undo_last();
+			node.board = prevNode.board;
+			node.myIdx = prevNode.myIdx;
+			node.opIdx = prevNode.opIdx;
+			node.heuristic = prevNode.heuristic;
+			node.eval = node.eval;
+			draw_board(node);
+			continue;
+		}
+		
+		char *curIdx = (player == MY) ? &node.myIdx : &node.opIdx;
+		
+		size_t y = move.find_first_of("12345678");
+		size_t x = move.find_first_of("12345678", y+1);
+		if (x == string::npos || y == string::npos)
+		{
+			cout << "Incorrect move format, try again." <<endl;
+			continue;
+		}
+		
+		newIdx = TOIDX(move[y] - '0' - 1, move[x] - '0' - 1);
+		
+		if( !valid_move(node.board, curIdx, &newIdx) )
+		{
+			cout << "Invalid move, try again." <<endl;
+			continue;
+		}
+		
+		moves.push_back(node);
+		*curIdx = newIdx;
+		node.board.set(newIdx, 1);
+		
+	}
+	
+	// success
+	opMoves = 0;
+	fast_children_both(node, &myMoves, &opMoves);
+	if(opMoves == 0)
+		return false;
+	return true;
+}
+
 
 bool play( Node &curNode )
 {
@@ -983,7 +1047,7 @@ bool play( Node &curNode )
 		
 		
 		cout << "I MOVE TO:  (" << GETY(curNode.myIdx)
-		<< " " << GETX(curNode.myIdx) << endl;
+		<< " " << GETX(curNode.myIdx) << ")\n" << endl;
 		
 		if(evaluate_node(curNode) == MININT)
 			return false;
@@ -1013,14 +1077,16 @@ int main(int argc, char *argv[])
 	// only needed for dense hashmap
 //	transpos.set_empty_key(Node());
 	
-	char playerNum;
-	string filename;
+	char playerNum, makemove;
+//	string filename;
 	try
 	{ // take in command line argument
 		assert(argc == 3);
 		playerNum = argv[1][0] - '0';
-		filename = argv[2];
-//		
+		makemove = argv[2][0];
+		
+//		filename = argv[2];
+//
 //		string read;
 //		cout << "do you want to read from file (y/n):  ";
 //		getline(cin, read);
@@ -1091,6 +1157,11 @@ int main(int argc, char *argv[])
 	Node initNode (board, myIdx, opIdx);
 	cerr << initNode << endl;
 	moves.push_back(initNode);
+	
+	if (makemove == 'y')
+	{
+		make_move(initNode, (playerNum == 1) ? MY : OP);
+	}
 	
 	//	cerr << connect_comp(initNode, opWithMe, MY) << " " << opWithMe << endl;
 	
