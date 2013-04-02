@@ -74,10 +74,10 @@ static const char DIRECTIONS[] = { NWEST,
 static const char MY = 1;
 static const char OP = -1;
 static const char MAXDEPTH = 40;
-static const int MAXSECS = 60;
+static const int MAXSECS = 20;
 static const int EARLYCUTOFF = MAXSECS / 4;
-static const int MININT = numeric_limits<int>::min() + 40;
-static const int MAXINT = numeric_limits<int>::max() - 40;
+static const int MININT = numeric_limits<int>::min() + 100;
+static const int MAXINT = numeric_limits<int>::max() - 100;
 
 static const char CONNCOMPLIMIT = ROWSIZE * ROWSIZE / 4;
 static const int CLOSEDCOMPONENT = MAXINT / 64;
@@ -482,7 +482,7 @@ bool valid_move( const BitBoard &board, const char *oldIdx,
 
 
 
-int connect_comp( const Node &node, bool &opWithMe, const char &player)
+int connect_comp( const Node &node, const char &player)
 {
 	char pos, newPos,
 	myIdx = (player == MY) ? node.myIdx : node.opIdx;
@@ -491,12 +491,11 @@ int connect_comp( const Node &node, bool &opWithMe, const char &player)
 	unordered_map<char, bool> m;
 	
 	h.push_back(myIdx);
-	make_heap(h.begin(), h.end(), by_closeness());
 	
 	while (!h.empty())
 	{
-		pos = h.front();
-		pop_heap(h.begin(), h.end(), by_closeness()); h.pop_back();
+		pos = h.back();
+		h.pop_back();
 		for (i = 0; i < sizeof(DIRECTIONS); i++)
 		{
 			newPos = pos + DIRECTIONS[i];
@@ -509,7 +508,7 @@ int connect_comp( const Node &node, bool &opWithMe, const char &player)
 			
 			if( !node.board[newPos])
 			{
-				h.push_back(newPos); push_heap(h.begin(),h.end());
+				h.push_back(newPos);
 				n++;
 			}
 		}
@@ -529,12 +528,11 @@ bool op_same_comp( const Node &node)
 	unordered_map<char, bool> m;
 	
 	h.push_back(node.myIdx);
-	make_heap(h.begin(), h.end(), by_closeness());
 	
 	while (!h.empty())
 	{
-		pos = h.front();
-		pop_heap(h.begin(), h.end(), by_closeness()); h.pop_back();
+		pos = h.back();
+		h.pop_back();
 		for (i = 0; i < sizeof(DIRECTIONS); i++)
 		{
 			newPos = pos + DIRECTIONS[i];
@@ -549,7 +547,7 @@ bool op_same_comp( const Node &node)
 				return true;
 			if( !node.board[newPos])
 			{
-				h.push_back(newPos); push_heap(h.begin(),h.end());
+				h.push_back(newPos);
 			}
 		}
 	}
@@ -566,24 +564,22 @@ int evaluate_node( const Node &node )
 		
 		if (node.board.count() > CONNCOMPLIMIT)
 		{
-			bool opWithMe = false;
 			if (!splitBoards)
 			{
-				opWithMe = op_same_comp(node);
-			}
-			if (!opWithMe)
-			{
-				int mySpace = connect_comp(node, opWithMe, MY);
-				int opSpace = connect_comp(node, opWithMe, OP);
-				//				cerr << "\tmyspace: " << mySpace
-				//				<< "\topspace: " << opSpace << "\t" << node <<endl;
-				
-				return const_cast<Node &>(node).heuristic =
-				(opSpace == 0) ? MAXINT + mySpace:
-				(mySpace == 0) ? MININT - opSpace + 40:
-				(mySpace > opSpace) ?
-				CLOSEDCOMPONENT * (int)node.board.count() - opSpace:
-				-1 * CLOSEDCOMPONENT * (int)node.board.count() - opSpace;
+				if (!op_same_comp(node))
+				{
+					int mySpace = connect_comp(node, MY);
+					int opSpace = connect_comp(node, OP);
+//					cerr << "\tmyspace: " << mySpace
+//					<< "\topspace: " << opSpace << "\t" << node <<endl;
+					
+					return const_cast<Node &>(node).heuristic =
+					(opSpace == 0) ? MAXINT + mySpace:
+					(mySpace == 0) ? MININT - opSpace + 40:
+					(mySpace > opSpace) ?
+					CLOSEDCOMPONENT * (int)node.board.count() - opSpace:
+					-1 * CLOSEDCOMPONENT * (int)node.board.count() - opSpace;
+				}
 			}
 		}
 		char myMoves=0, opMoves=0;
@@ -701,7 +697,7 @@ Node search_root(Node &initNode, int &alpha)
 	}
 	
 	int i = 0, d = 0, value, beta = MAXINT, bestIdx = 0, lastIdx = 0;
-	for(; d < MAXDEPTH ; d += 2)
+	for(; d < MAXDEPTH ; d += 1)
 	{
 		try{
 			for (; i < numKids; i++)
@@ -792,6 +788,14 @@ int alpha_beta_transpo(Node &node, int alpha, int beta, const char *player,
 	if( past_time(tv, end) )
 		throw "Ran out of time";
 	
+	
+//	if(game_over(node) || depth == 0)
+	if(depth == 0)
+	{
+		// cerr << "\t\tleafNode:\t" << node<< endl;
+		return evaluate_node(node) * *player;
+	}
+	
 	HashEntry entry;
 	bool hash_hit = lookup(node, entry);
 	if(hash_hit && entry.depth >= depth)
@@ -814,11 +818,6 @@ int alpha_beta_transpo(Node &node, int alpha, int beta, const char *player,
 			return entry.score;
 	}
 	
-	if(game_over(node) || depth == 0)
-	{
-		// cerr << "\t\tleafNode:\t" << node<< endl;
-		return evaluate_node(node) * *player;
-	}
 	
 	// cerr << endl;
 	
@@ -1083,7 +1082,7 @@ int main(int argc, char *argv[])
 	// only needed for dense hashmap
 //	transpos.set_empty_key(Node());
 	
-	char playerNum, makemove;
+	char playerNum;
 //	string filename;
 	try
 	{ // take in command line argument
