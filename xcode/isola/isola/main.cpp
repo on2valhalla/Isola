@@ -524,8 +524,7 @@ int connect_comp( const Node &node, bool &opWithMe, const char &player)
 
 bool op_same_comp( const Node &node)
 {
-	char pos, newPos;
-	int n = 0, i;
+	char pos, newPos, i;
 	vector<char> h;
 	unordered_map<char, bool> m;
 	
@@ -551,7 +550,6 @@ bool op_same_comp( const Node &node)
 			if( !node.board[newPos])
 			{
 				h.push_back(newPos); push_heap(h.begin(),h.end());
-				n++;
 			}
 		}
 	}
@@ -1042,9 +1040,9 @@ bool play( Node &curNode )
 		
 		curNode = search_root(curNode, alpha);
 		
-//		cout <<"after: "<< curNode <<"\ttranspo: "<< transpos.size()
-//			<<"\tbuckets: "<< transpos.bucket_count()
-//			<<endl << endl <<endl;
+		cerr <<"\n\nafter: "<< curNode <<"\ttranspo: "<< transpos.size()
+			<<"\tbuckets: "<< transpos.bucket_count()
+			<<endl << endl <<endl;
 		
 		cout << "\n\n";
 		draw_board(curNode);
@@ -1086,7 +1084,7 @@ int main(int argc, char *argv[])
 //	string filename;
 	try
 	{ // take in command line argument
-		assert(argc > 2);
+		assert(argc >= 2);
 		playerNum = argv[1][0] - '0';
 //		makemove = argv[2][0];
 		
@@ -1160,11 +1158,11 @@ int main(int argc, char *argv[])
 	
 	
 	Node initNode (board, myIdx, opIdx);
-	cerr << initNode << endl;
+//	cerr << initNode << endl;
 	moves.push_back(initNode);
 	
 	string makeMove;
-	cout << "Please enter a move (row col):  ";
+	cout << "Would you like to start manually?";
 	getline(cin, makeMove);
 	
 	size_t begin = makeMove.find_first_of("y");
