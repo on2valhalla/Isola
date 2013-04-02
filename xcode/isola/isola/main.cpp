@@ -564,28 +564,28 @@ int evaluate_node( const Node &node )
 	{
 		const_cast<Node&>(node).eval = true;
 		
-		if (node.board.count() > CONNCOMPLIMIT)
-		{
-			bool opWithMe = false;
-			if (!splitBoards)
-			{
-				opWithMe = op_same_comp(node);
-			}
-			if (!opWithMe)
-			{
-				int mySpace = connect_comp(node, opWithMe, MY);
-				int opSpace = connect_comp(node, opWithMe, OP);
-				//				cerr << "\tmyspace: " << mySpace
-				//				<< "\topspace: " << opSpace << "\t" << node <<endl;
-				
-				return const_cast<Node &>(node).heuristic =
-				(opSpace == 0) ? MAXINT + mySpace:
-				(mySpace == 0) ? MININT + mySpace:
-				(mySpace > opSpace) ?
-				CLOSEDCOMPONENT * (int)node.board.count() - opSpace:
-				-1 * CLOSEDCOMPONENT * (int)node.board.count() - opSpace;
-			}
-		}
+//		if (node.board.count() > CONNCOMPLIMIT)
+//		{
+//			bool opWithMe = false;
+//			if (!splitBoards)
+//			{
+//				opWithMe = op_same_comp(node);
+//			}
+//			if (!opWithMe)
+//			{
+//				int mySpace = connect_comp(node, opWithMe, MY);
+//				int opSpace = connect_comp(node, opWithMe, OP);
+//				//				cerr << "\tmyspace: " << mySpace
+//				//				<< "\topspace: " << opSpace << "\t" << node <<endl;
+//				
+//				return const_cast<Node &>(node).heuristic =
+//				(opSpace == 0) ? MAXINT + mySpace:
+//				(mySpace == 0) ? MININT + mySpace:
+//				(mySpace > opSpace) ?
+//				CLOSEDCOMPONENT * (int)node.board.count() - opSpace:
+//				-1 * CLOSEDCOMPONENT * (int)node.board.count() - opSpace;
+//			}
+//		}
 		char myMoves=0, opMoves=0;
 		fast_children_both(node, &myMoves, &opMoves);
 		
