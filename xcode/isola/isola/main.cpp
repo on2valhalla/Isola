@@ -580,7 +580,7 @@ int evaluate_node( const Node &node )
 				
 				return const_cast<Node &>(node).heuristic =
 				(opSpace == 0) ? MAXINT + mySpace:
-				(mySpace == 0) ? MININT + mySpace:
+				(mySpace == 0) ? MININT - opSpace + 40:
 				(mySpace > opSpace) ?
 				CLOSEDCOMPONENT * (int)node.board.count() - opSpace:
 				-1 * CLOSEDCOMPONENT * (int)node.board.count() - opSpace;
@@ -591,7 +591,7 @@ int evaluate_node( const Node &node )
 		
 		return const_cast<Node &>(node).heuristic =
 		(opMoves == 0) ? MAXINT + myMoves:
-		(myMoves == 0) ? MININT - opMoves:
+		(myMoves == 0) ? MININT - opMoves + 40:
 		(myMoves - opMoves*3 + 60) * (int)node.board.count();
 	}
 	return node.heuristic;
@@ -695,7 +695,10 @@ Node search_root(Node &initNode, int &alpha)
 	// random_shuffle(children.begin(),children.end());
 	
 	if (!splitBoards)
+	{
 		splitBoards = !op_same_comp(initNode);
+		cerr << "boards are split: " << splitBoards << endl;
+	}
 	
 	int i = 0, d = 0, value, beta = MAXINT, bestIdx = 0, lastIdx = 0;
 	for(; d < MAXDEPTH ; d += 2)
@@ -734,15 +737,15 @@ Node search_root(Node &initNode, int &alpha)
 				<< endl;
 				
 			}
-			if(alpha == MININT)
-				return children[bestIdx];
+//			if(alpha == MININT)
+//				return children[bestIdx];
 			if(value >= MAXINT)
 				return children[bestIdx];
 			
 		}catch (...)
 		{
-			alpha *= .9;
-			//			alpha = MININT;
+//			alpha *= .9;
+			alpha = MININT;
 			cerr << "ended because of time cutoff" << endl;
 			break;
 		}
