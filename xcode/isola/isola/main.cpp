@@ -1071,7 +1071,7 @@ int main(int argc, char *argv[])
 	 *
 	 */
 	// only needed for dense hashmap
-//	transpos.set_empty_key(Node());
+	transpos.set_empty_key(Node());
 	
 	char playerNum;
 	string filename;
