@@ -76,8 +76,8 @@ static const char OP = -1;
 static const char MAXDEPTH = 40;
 static const int MAXSECS = 60;
 static const int EARLYCUTOFF = MAXSECS / 4;
-static const int MININT = numeric_limits<int>::min() + 40;
-static const int MAXINT = numeric_limits<int>::max() - 40;
+static const int MININT = numeric_limits<int>::min() + 100;
+static const int MAXINT = numeric_limits<int>::max() - 100;
 
 static const char CONNCOMPLIMIT = ROWSIZE * ROWSIZE / 4;
 static const int CLOSEDCOMPONENT = MAXINT / 64;
