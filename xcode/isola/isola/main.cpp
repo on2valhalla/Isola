@@ -300,7 +300,7 @@ bool splitBoards = false;
 
 vector<Node> moves;
 
-NodeMap transpos(30000000);
+NodeMap transpos(100000000);
 //
 //-----------------------------------------------------------------------------
 
