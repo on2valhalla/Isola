@@ -23,6 +23,14 @@
 #include <sstream>		/* stringstream */
 #include <unordered_map> /* hash set */
 #include <algorithm>	/* heap functions */
+//#include <boost/serialization/serialization.hpp>
+//#include <boost/serialization/map.hpp>
+#include <boost/serialization/bitset.hpp>
+//#include <boost/serialization/unordered_map.hpp>
+//#include <boost/serialization/dense_hash_map.hpp>
+#include <boost/serialization/sparse_hash_map.hpp>
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
 #include <google/dense_hash_map>
 #include <google/sparse_hash_map>
 
@@ -90,9 +98,9 @@ struct by_closeness;
 
 
 typedef bitset<BOARDSIZE> BitBoard;
-typedef unordered_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
+//typedef unordered_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
 //typedef google::dense_hash_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
-//typedef google::sparse_hash_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
+typedef google::sparse_hash_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
 //typedef unordered_map<size_t, HashEntry> NodeMap;
 //typedef google::dense_hash_map<size_t, HashEntry> NodeMap;
 //typedef google::sparse_hash_map<size_t, HashEntry> NodeMap;
@@ -174,6 +182,19 @@ public:
 		<< GETX((int)n.opIdx) << "\th: " << evaluate_node(n);
 		return o;
 	}
+	
+	
+    friend class boost::serialization::access;
+    // When the class Archive corresponds to an output archive, the
+    // & operator is defined similar to <<.  Likewise, when the class Archive
+    // is a type of input archive the & operator is defined similar to >>.
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+        ar & board;
+        ar & myIdx;
+        ar & opIdx;
+    }
 };
 
 
@@ -184,6 +205,19 @@ struct HashEntry
 	// Relies on static ordering of returned moves
 	// so it should be checked before sorting/shuffling
 	char depth;
+	
+	
+    friend class boost::serialization::access;
+    // When the class Archive corresponds to an output archive, the
+    // & operator is defined similar to <<.  Likewise, when the class Archive
+    // is a type of input archive the & operator is defined similar to >>.
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+        ar & scoreType;
+        ar & score;
+        ar & depth;
+    }
 	
 };
 
@@ -895,6 +929,24 @@ void store(const Node &node, const char &scoreType,
 
 
 
+void serialize_table(string &filename)
+{
+    std::ofstream ofs(filename);
+    // save data to archive
+	boost::archive::text_oarchive oa(ofs);
+	// write class instance to archive
+	oa << transpos;
+	
+}
+void read_table(string &filename)
+{
+    std::ifstream ifs(filename);
+    // save data to archive
+	boost::archive::text_iarchive ia(ifs);
+	// write class instance to archive
+	ia >> transpos;
+}
+
 
 
 
@@ -1005,13 +1057,6 @@ bool play( Node &curNode )
 	return false;
 }
 
-void serialize_table(string &filename)
-{
-//    std::ofstream ofs(filename);
-//	transpos.serialize(<#ValueSerializer serializer#>, ofs);
-	
-}
-
 int main(int argc, char *argv[])
 {
 	/* USAGE
@@ -1033,11 +1078,19 @@ int main(int argc, char *argv[])
 		playerNum = argv[1][0] - '0';
 		filename = argv[2];
 		
+		string read;
+		cout << "do you want to read from file (y/n):  ";
+		getline(cin, read);
+		
+		if (read == "y")
+			read_table(filename);
+		
 	}
 	catch (int e)
 	{
 		return usage();
 	}
+	
 	
 	// setup the board: init to zeros, add starting positions
 	BitBoard board;
