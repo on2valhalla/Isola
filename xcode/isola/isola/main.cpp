@@ -74,8 +74,6 @@ static const char DIRECTIONS[] = { NWEST,
 static const char MY = 1;
 static const char OP = -1;
 static const char MAXDEPTH = 40;
-static const int MAXSECS = 60;
-static const int EARLYCUTOFF = MAXSECS / 4;
 static const int MININT = numeric_limits<int>::min() + 100;
 static const int MAXINT = numeric_limits<int>::max() - 100;
 
@@ -184,18 +182,18 @@ public:
 		return o;
 	}
 	
-//	
-//    friend class boost::serialization::access;
-//    // When the class Archive corresponds to an output archive, the
-//    // & operator is defined similar to <<.  Likewise, when the class Archive
-//    // is a type of input archive the & operator is defined similar to >>.
-//    template<class Archive>
-//    void serialize(Archive & ar, const unsigned int version)
-//    {
-//        ar & board;
-//        ar & myIdx;
-//        ar & opIdx;
-//    }
+	//
+	//    friend class boost::serialization::access;
+	//    // When the class Archive corresponds to an output archive, the
+	//    // & operator is defined similar to <<.  Likewise, when the class Archive
+	//    // is a type of input archive the & operator is defined similar to >>.
+	//    template<class Archive>
+	//    void serialize(Archive & ar, const unsigned int version)
+	//    {
+	//        ar & board;
+	//        ar & myIdx;
+	//        ar & opIdx;
+	//    }
 };
 
 
@@ -207,19 +205,19 @@ struct HashEntry
 	// so it should be checked before sorting/shuffling
 	char depth;
 	
-//	
-//    friend class boost::serialization::access;
-//    // When the class Archive corresponds to an output archive, the
-//    // & operator is defined similar to <<.  Likewise, when the class Archive
-//    // is a type of input archive the & operator is defined similar to >>.
-//    template<class Archive>
-//    void serialize(Archive & ar, const unsigned int version)
-//    {
-//        ar & scoreType;
-//        ar & score;
-//        ar & depth;
-//    }
-//	
+	//
+	//    friend class boost::serialization::access;
+	//    // When the class Archive corresponds to an output archive, the
+	//    // & operator is defined similar to <<.  Likewise, when the class Archive
+	//    // is a type of input archive the & operator is defined similar to >>.
+	//    template<class Archive>
+	//    void serialize(Archive & ar, const unsigned int version)
+	//    {
+	//        ar & scoreType;
+	//        ar & score;
+	//        ar & depth;
+	//    }
+	//
 };
 
 namespace std {
@@ -262,28 +260,6 @@ struct by_max
 	}
 	
 };
-struct by_closeness
-{
-	bool operator() (const Node& lhs, const Node& rhs)
-	{
-		char Lx = abs(GETX(lhs.myIdx) - GETX(lhs.opIdx));
-		char Ly = abs(GETX(lhs.myIdx) - GETX(lhs.opIdx));
-		
-		char Rx = abs(GETX(rhs.myIdx) - GETX(rhs.opIdx));
-		char Ry = abs(GETX(rhs.myIdx) - GETX(rhs.opIdx));
-		return (Lx + Ly) < (Rx + Ry);
-	}
-	bool operator() (const char& lhs, const char& rhs)
-	{
-		char Lx = abs(GETX(lhs) - GETX(lhs));
-		char Ly = abs(GETX(lhs) - GETX(lhs));
-		
-		char Rx = abs(GETX(rhs) - GETX(rhs));
-		char Ry = abs(GETX(rhs) - GETX(rhs));
-		return (Lx + Ly) < (Rx + Ry);
-	}
-	
-};
 //
 //-----------------------------------------------------------------------------
 
@@ -297,6 +273,8 @@ string me, op, block = "|||";
 
 char connCompSplitDepth = numeric_limits<char>::max();
 bool splitBoards = false;
+
+int maxSecs = 60;
 
 vector<Node> moves;
 
@@ -315,9 +293,9 @@ NodeMap transpos(100000000);
 
 int usage()
 {
-	cout << "USAGE: $ isola PLAYER\n" <<
-	"Where PLAYER is [1/2] representing "<<
-	"the player this instance is"<< endl;
+	cout << "USAGE: $ isola PLAYER TIME_LIMIT\n" <<
+	"Where PLAYER is [1/2] representing the player this instance is"
+	<< "\n and TIME_LIMIT is the maximum allotted time" endl;
 	return 1;
 }
 
@@ -570,8 +548,8 @@ int evaluate_node( const Node &node )
 				{
 					int mySpace = connect_comp(node, MY);
 					int opSpace = connect_comp(node, OP);
-//					cerr << "\tmyspace: " << mySpace
-//					<< "\topspace: " << opSpace << "\t" << node <<endl;
+					//					cerr << "\tmyspace: " << mySpace
+					//					<< "\topspace: " << opSpace << "\t" << node <<endl;
 					
 					return const_cast<Node &>(node).heuristic =
 					(opSpace == 0) ? MAXINT + mySpace:
@@ -682,7 +660,7 @@ Node search_root(Node &initNode, int &alpha)
 	// set time limit
 	timeval begin, end, tv, tmp;
 	gettimeofday(&begin, NULL);
-	end = add_time(begin, &MAXSECS);
+	end = add_time(begin, &maxSecs);
 	
 	
 	vector<Node> children;
@@ -702,12 +680,12 @@ Node search_root(Node &initNode, int &alpha)
 		try{
 			for (; i < numKids; i++)
 			{
-//				value = -1 * alpha_beta(children[i],
-//										-1*beta,
-//										-1*alpha,
-//										&OP,
-//										end,
-//										d);
+				//				value = -1 * alpha_beta(children[i],
+				//										-1*beta,
+				//										-1*alpha,
+				//										&OP,
+				//										end,
+				//										d);
 				value = -1 * alpha_beta_transpo(children[i],
 												-1*beta,
 												-1*alpha,
@@ -733,14 +711,14 @@ Node search_root(Node &initNode, int &alpha)
 				<< endl;
 				
 			}
-//			if(alpha == MININT)
-//				return children[bestIdx];
+			//			if(alpha == MININT)
+			//				return children[bestIdx];
 			if(value >= MAXINT)
 				return children[bestIdx];
 			
 		}catch (...)
 		{
-//			alpha *= .9;
+			//			alpha *= .9;
 			alpha = MININT;
 			cerr << "ended because of time cutoff" << endl;
 			break;
@@ -751,20 +729,20 @@ Node search_root(Node &initNode, int &alpha)
 		
 		lastIdx = bestIdx;
 		i = 0;
-	//	alpha *= .9;
+		//	alpha *= .9;
 		alpha = MININT;
 		
 		gettimeofday(&tmp, NULL);
 		tv = diff(begin, tmp);
 		cerr << "time: " << display_time( tv )
 		<< "\tdepth:" << d << endl <<endl;
-//		tv = diff(tmp, end);
-//		if( tv.tv_sec < EARLYCUTOFF)
-//		{
-//			cerr << "early cuttoff:\t" << tv.tv_sec
-//			<< "\t" << (long)MAXSECS/4 << endl;
-//			break;
-//		}
+		//		tv = diff(tmp, end);
+		//		if( tv.tv_sec < EARLYCUTOFF)
+		//		{
+		//			cerr << "early cuttoff:\t" << tv.tv_sec
+		//			<< "\t" << (long)maxSecs/4 << endl;
+		//			break;
+		//		}
 	}
 	
 	gettimeofday(&tv, NULL);
@@ -789,7 +767,7 @@ int alpha_beta_transpo(Node &node, int alpha, int beta, const char *player,
 		throw "Ran out of time";
 	
 	
-//	if(game_over(node) || depth == 0)
+	//	if(game_over(node) || depth == 0)
 	if(depth == 0)
 	{
 		// cerr << "\t\tleafNode:\t" << node<< endl;
@@ -866,7 +844,7 @@ int alpha_beta_transpo(Node &node, int alpha, int beta, const char *player,
 bool lookup(const Node &node, HashEntry &entry)
 {
 	NodeMap::const_iterator got = transpos.find(node);
-//	NodeMap::const_iterator got = transpos.find(hash<Node>()(node));
+	//	NodeMap::const_iterator got = transpos.find(hash<Node>()(node));
 	if( got == transpos.end())
 		return false;
 	else
@@ -884,7 +862,7 @@ void store(const Node &node, const char &scoreType,
 	entry.score = score;
 	entry.depth = depth;
 	transpos[node] = entry;
-//	transpos[hash<Node>()(node)] = entry;
+	//	transpos[hash<Node>()(node)] = entry;
 }
 
 
@@ -1034,17 +1012,17 @@ bool play( Node &curNode )
 	
 	while( myMoves > 0)
 	{
-//		cout << "playloop:" <<endl;
-//		cout <<"before: "<< curNode <<endl << endl;
+		//		cout << "playloop:" <<endl;
+		//		cout <<"before: "<< curNode <<endl << endl;
 		
-//		if ( alpha > CLOSEDCOMPONENT )
+		//		if ( alpha > CLOSEDCOMPONENT )
 		alpha = MININT;
 		
 		curNode = search_root(curNode, alpha);
 		
 		cerr <<"\n\nafter: "<< curNode <<"\ttranspo: "<< transpos.size()
-			<<"\tbuckets: "<< transpos.bucket_count()
-			<<endl << endl <<endl;
+		<<"\tbuckets: "<< transpos.bucket_count()
+		<<endl << endl <<endl;
 		
 		cout << "\n\n";
 		draw_board(curNode);
@@ -1073,31 +1051,33 @@ int main(int argc, char *argv[])
 {
 	/* USAGE
 	 *
-	 * $ isola PLAYER
+	 * $ isola PLAYER TIME_LIMIT
 	 *
-	 *	where SIZE is a single int board size (normally should be 8)
-	 *	and player is [1 or 2] representing the player this instance is
+	 *	Where PLAYER is [1 or 2] representing the player this instance is
 	 *
 	 */
+	
+	
 	// only needed for dense hashmap
-//	transpos.set_empty_key(Node());
+	//	transpos.set_empty_key(Node());
 	
 	char playerNum;
-//	string filename;
+	//	string filename;
 	try
 	{ // take in command line argument
-		assert(argc >= 2);
+		assert(argc >= 3);
 		playerNum = argv[1][0] - '0';
-//		makemove = argv[2][0];
+		maxSecs = atoi(argv[2]);
+		//		makemove = argv[2][0];
 		
-//		filename = argv[2];
-//
-//		string read;
-//		cout << "do you want to read from file (y/n):  ";
-//		getline(cin, read);
-//		
-//		if (read == "y")
-//			read_table(filename);
+		//		filename = argv[2];
+		//
+		//		string read;
+		//		cout << "do you want to read from file (y/n):  ";
+		//		getline(cin, read);
+		//
+		//		if (read == "y")
+		//			read_table(filename);
 		
 	}
 	catch (int e)
@@ -1129,38 +1109,38 @@ int main(int argc, char *argv[])
 	
 	
 	//TESTING/////////
-//
-//	myIdx = TOIDX(6, 6);
-//	opIdx = TOIDX(7, 6);
-//	me = "*X*";
-//	op = "*O*";
-//
-//	board.set(myIdx, 1);
-//	board.set(opIdx, 1);
-//	board.set(TOIDX(0, 0), 1);
-//	board.set(TOIDX(ROWSIZE-1, ROWSIZE-1), 1);
-//	board.set(TOIDX(1, 4), 1);
-//	board.set(TOIDX(1, 6), 1);
-//	board.set(TOIDX(2, 2), 1);
-//	board.set(TOIDX(2, 3), 1);
-//	board.set(TOIDX(2, 4), 1);
-//	board.set(TOIDX(2, 5), 1);
-//	board.set(TOIDX(2, 6), 1);
-//	board.set(TOIDX(2, 7), 1);
-//	board.set(TOIDX(3, 1), 1);
-//	board.set(TOIDX(3, 5), 1);
-//	board.set(TOIDX(3, 6), 1);
-//	board.set(TOIDX(3, 7), 1);
-//	board.set(TOIDX(4, 2), 1);
-//	board.set(TOIDX(4, 3), 1);
-//	board.set(TOIDX(4, 6), 1);
-//	board.set(TOIDX(5, 4), 1);
-//	board.set(TOIDX(5, 5), 1);
-//	board.set(TOIDX(6, 7), 1);
+	//
+	//	myIdx = TOIDX(6, 6);
+	//	opIdx = TOIDX(7, 6);
+	//	me = "*X*";
+	//	op = "*O*";
+	//
+	//	board.set(myIdx, 1);
+	//	board.set(opIdx, 1);
+	//	board.set(TOIDX(0, 0), 1);
+	//	board.set(TOIDX(ROWSIZE-1, ROWSIZE-1), 1);
+	//	board.set(TOIDX(1, 4), 1);
+	//	board.set(TOIDX(1, 6), 1);
+	//	board.set(TOIDX(2, 2), 1);
+	//	board.set(TOIDX(2, 3), 1);
+	//	board.set(TOIDX(2, 4), 1);
+	//	board.set(TOIDX(2, 5), 1);
+	//	board.set(TOIDX(2, 6), 1);
+	//	board.set(TOIDX(2, 7), 1);
+	//	board.set(TOIDX(3, 1), 1);
+	//	board.set(TOIDX(3, 5), 1);
+	//	board.set(TOIDX(3, 6), 1);
+	//	board.set(TOIDX(3, 7), 1);
+	//	board.set(TOIDX(4, 2), 1);
+	//	board.set(TOIDX(4, 3), 1);
+	//	board.set(TOIDX(4, 6), 1);
+	//	board.set(TOIDX(5, 4), 1);
+	//	board.set(TOIDX(5, 5), 1);
+	//	board.set(TOIDX(6, 7), 1);
 	
 	
 	Node initNode (board, myIdx, opIdx);
-//	cerr << initNode << endl;
+	//	cerr << initNode << endl;
 	moves.push_back(initNode);
 	
 	string makeMove;
@@ -1194,7 +1174,7 @@ int main(int argc, char *argv[])
 	else
 		cout << ":( :(  You win  :( :(" << endl;
 	
-//	serialize_table(filename);
+	//	serialize_table(filename);
 	// completed sucessfully
 	return 0;
 }
