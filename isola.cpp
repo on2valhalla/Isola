@@ -295,7 +295,7 @@ int usage()
 {
 	cout << "USAGE: $ isola PLAYER TIME_LIMIT\n" <<
 	"Where PLAYER is [1/2] representing the player this instance is"
-	<< "\n and TIME_LIMIT is the maximum allotted time" endl;
+	<< "\n and TIME_LIMIT is the maximum allotted time" << endl;
 	return 1;
 }
 
@@ -1056,8 +1056,8 @@ int main(int argc, char *argv[])
 	 *	Where PLAYER is [1 or 2] representing the player this instance is
 	 *
 	 */
-
-
+	
+	
 	// only needed for dense hashmap
 	//	transpos.set_empty_key(Node());
 	
