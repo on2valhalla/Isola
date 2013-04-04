@@ -21,6 +21,7 @@
 #include <limits>		/* min and max for types */
 #include <ctime>		/* for system time */
 #include <sstream>		/* stringstream */
+#include <algorithm>
 #include <unordered_map> /* hash set */
 
 
