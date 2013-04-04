@@ -3,7 +3,7 @@
  * Isola board game playing program
  *
  * Uses the Negamax variant of the minimax search with alpha/beta pruning.
- * Also implements a history heuristic and transposition table.
+ * Also implements a knowledge heuristic and transposition table.
  *
  */
 
@@ -21,21 +21,8 @@
 #include <limits>		/* min and max for types */
 #include <ctime>		/* for system time */
 #include <sstream>		/* stringstream */
+#include <algorithm>	/* sort and shuffle */
 #include <unordered_map> /* hash set */
-#include <algorithm>	/* heap functions */
-//#include <boost/serialization/serialization.hpp>
-//#include <boost/serialization/map.hpp>
-//#include <boost/serialization/bitset.hpp>
-//#include <boost/serialization/unordered_map.hpp>
-//#include <boost/serialization/dense_hash_map.hpp>
-//#include <boost/serialization/sparse_hash_map.hpp>
-//#include "dense_hash_map.hpp"
-//#include "sparse_hash_map.hpp"
-//#include <boost/archive/text_oarchive.hpp>
-//#include <boost/archive/text_iarchive.hpp>
-//#include <google/dense_hash_map>
-//#include <google/sparse_hash_map>
-//#include "sparsehash/dense_hash_map"
 
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
@@ -100,15 +87,9 @@ struct by_closeness;
 
 typedef bitset<BOARDSIZE> BitBoard;
 typedef unordered_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
-//typedef google::dense_hash_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
-//typedef google::sparse_hash_map<Node, HashEntry, hash<Node>, equal_to<Node> > NodeMap;
-//typedef unordered_map<size_t, HashEntry> NodeMap;
-//typedef google::dense_hash_map<size_t, HashEntry> NodeMap;
-//typedef google::sparse_hash_map<size_t, HashEntry> NodeMap;
 
 
 int usage();
-bool game_over(const Node&);
 int draw_board(const Node&);
 
 string display_time( const timeval &tv );
@@ -181,19 +162,6 @@ public:
 		<< GETX((int)n.opIdx) << "\th: " << evaluate_node(n);
 		return o;
 	}
-	
-	//
-	//    friend class boost::serialization::access;
-	//    // When the class Archive corresponds to an output archive, the
-	//    // & operator is defined similar to <<.  Likewise, when the class Archive
-	//    // is a type of input archive the & operator is defined similar to >>.
-	//    template<class Archive>
-	//    void serialize(Archive & ar, const unsigned int version)
-	//    {
-	//        ar & board;
-	//        ar & myIdx;
-	//        ar & opIdx;
-	//    }
 };
 
 
@@ -204,20 +172,6 @@ struct HashEntry
 	// Relies on static ordering of returned moves
 	// so it should be checked before sorting/shuffling
 	char depth;
-	
-	//
-	//    friend class boost::serialization::access;
-	//    // When the class Archive corresponds to an output archive, the
-	//    // & operator is defined similar to <<.  Likewise, when the class Archive
-	//    // is a type of input archive the & operator is defined similar to >>.
-	//    template<class Archive>
-	//    void serialize(Archive & ar, const unsigned int version)
-	//    {
-	//        ar & scoreType;
-	//        ar & score;
-	//        ar & depth;
-	//    }
-	//
 };
 
 namespace std {
@@ -278,7 +232,7 @@ int maxSecs = 60;
 
 vector<Node> moves;
 
-NodeMap transpos(100000000);
+NodeMap transpos(150000000);
 //
 //-----------------------------------------------------------------------------
 
@@ -297,15 +251,6 @@ int usage()
 	"Where PLAYER is [1/2] representing the player this instance is"
 	<< "\n and TIME_LIMIT is the maximum allotted time" << endl;
 	return 1;
-}
-
-bool game_over(const Node &node)
-{
-	int v = evaluate_node(node);
-	if(v == MAXINT || v == MININT)
-		return true;
-	else
-		return false;
 }
 
 Node undo_last()
@@ -539,7 +484,7 @@ int evaluate_node( const Node &node )
 	if (!node.eval)
 	{
 		const_cast<Node&>(node).eval = true;
-		
+
 		if (node.board.count() > CONNCOMPLIMIT)
 		{
 			if (!splitBoards)
@@ -550,7 +495,7 @@ int evaluate_node( const Node &node )
 					int opSpace = connect_comp(node, OP);
 					//					cerr << "\tmyspace: " << mySpace
 					//					<< "\topspace: " << opSpace << "\t" << node <<endl;
-					
+
 					return const_cast<Node &>(node).heuristic =
 					(opSpace == 0) ? MAXINT + mySpace:
 					(mySpace == 0) ? MININT - opSpace + 40:
@@ -666,7 +611,6 @@ Node search_root(Node &initNode, int &alpha)
 	vector<Node> children;
 	int numKids = get_children(initNode, children, &MY);
 	sort(children.begin(), children.end(), by_max());
-	// random_shuffle(children.begin(),children.end());
 	
 	if (!splitBoards)
 	{
@@ -680,12 +624,6 @@ Node search_root(Node &initNode, int &alpha)
 		try{
 			for (; i < numKids; i++)
 			{
-				//				value = -1 * alpha_beta(children[i],
-				//										-1*beta,
-				//										-1*alpha,
-				//										&OP,
-				//										end,
-				//										d);
 				value = -1 * alpha_beta_transpo(children[i],
 												-1*beta,
 												-1*alpha,
@@ -711,16 +649,18 @@ Node search_root(Node &initNode, int &alpha)
 				<< endl;
 				
 			}
-			//			if(alpha == MININT)
-			//				return children[bestIdx];
 			if(value >= MAXINT)
 				return children[bestIdx];
 			
 		}catch (...)
 		{
-			//			alpha *= .9;
 			alpha = MININT;
 			cerr << "ended because of time cutoff" << endl;
+			cerr.flush();
+			
+			if(value >= MAXINT)
+				return children[bestIdx];
+			
 			break;
 		}
 		cerr << "best: " << alpha
@@ -729,20 +669,13 @@ Node search_root(Node &initNode, int &alpha)
 		
 		lastIdx = bestIdx;
 		i = 0;
-		//	alpha *= .9;
 		alpha = MININT;
 		
 		gettimeofday(&tmp, NULL);
 		tv = diff(begin, tmp);
 		cerr << "time: " << display_time( tv )
 		<< "\tdepth:" << d << endl <<endl;
-		//		tv = diff(tmp, end);
-		//		if( tv.tv_sec < EARLYCUTOFF)
-		//		{
-		//			cerr << "early cuttoff:\t" << tv.tv_sec
-		//			<< "\t" << (long)maxSecs/4 << endl;
-		//			break;
-		//		}
+		cerr.flush();
 	}
 	
 	gettimeofday(&tv, NULL);
@@ -756,24 +689,18 @@ Node search_root(Node &initNode, int &alpha)
 int alpha_beta_transpo(Node &node, int alpha, int beta, const char *player,
 					   const timeval &end, char depth)
 {
-	// for(int i = 1; i <= depth; i += 3)
-	// 	cerr << " ";
-	// cerr << "d:" << depth << "\t" << node << "\t\n\tend: " << display_time(end) << "\n";
-	
-	
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	if( past_time(tv, end) )
 		throw "Ran out of time";
 	
 	
-	//	if(game_over(node) || depth == 0)
 	if(depth == 0)
 	{
-		// cerr << "\t\tleafNode:\t" << node<< endl;
 		return evaluate_node(node) * *player;
 	}
 	
+	// Hash Table lookup
 	HashEntry entry;
 	bool hash_hit = lookup(node, entry);
 	if(hash_hit && entry.depth >= depth)
@@ -797,13 +724,11 @@ int alpha_beta_transpo(Node &node, int alpha, int beta, const char *player,
 	}
 	
 	
-	// cerr << endl;
-	
-	
 	
 	vector<Node> children;
 	char numKids = get_children(node, children, player);
-	//	sort(children.begin(), children.end(), by_max());
+	
+	// shuffle because sorting is too slow
 	random_shuffle(children.begin(),children.end());
 	
 	int i = 0, value, best = MININT;
@@ -815,7 +740,7 @@ int alpha_beta_transpo(Node &node, int alpha, int beta, const char *player,
 									   (*player == MY) ? &OP : &MY,
 									   end,
 									   depth - 1));
-		// cerr << "\t\tresult: " << result <<endl;
+		
 		
 		if( value > best)
 			best = value;
@@ -824,8 +749,9 @@ int alpha_beta_transpo(Node &node, int alpha, int beta, const char *player,
 		if( best >= beta)
 			break;
 	}
-	// cerr << "alpha:\t" << alpha << endl;
 	
+	
+	// Hash Table insert
 	if(best <= alpha) // a lowerbound value
 		store(node, LOWERBOUND, best, depth);
 	else if(best >= beta) // an upperbound value
@@ -844,7 +770,7 @@ int alpha_beta_transpo(Node &node, int alpha, int beta, const char *player,
 bool lookup(const Node &node, HashEntry &entry)
 {
 	NodeMap::const_iterator got = transpos.find(node);
-	//	NodeMap::const_iterator got = transpos.find(hash<Node>()(node));
+	
 	if( got == transpos.end())
 		return false;
 	else
@@ -862,7 +788,6 @@ void store(const Node &node, const char &scoreType,
 	entry.score = score;
 	entry.depth = depth;
 	transpos[node] = entry;
-	//	transpos[hash<Node>()(node)] = entry;
 }
 
 
@@ -872,11 +797,10 @@ void store(const Node &node, const char &scoreType,
 
 bool take_move( Node &node, int &alpha)
 {
-	// cout << "take:" <<endl;
 	char newIdx = 0, myMoves = 0, opMoves = 0;
 	fast_children_both(node, &myMoves, &opMoves);
 	
-	//	cout << "numKids Op: " << (int) n << endl;
+	
 	while( opMoves != 0 )
 	{
 		string move;
@@ -999,8 +923,7 @@ bool make_move( Node &node, char player)
 
 bool play( Node &curNode )
 {
-	// cout << "play:" <<endl;
-	evaluate_node(curNode);
+	
 	int alpha = MININT;
 	
 	cout << "\n\n";
@@ -1012,17 +935,20 @@ bool play( Node &curNode )
 	
 	while( myMoves > 0)
 	{
-		//		cout << "playloop:" <<endl;
-		//		cout <<"before: "<< curNode <<endl << endl;
-		
-		//		if ( alpha > CLOSEDCOMPONENT )
+		// reset alpha
 		alpha = MININT;
+		
+		cerr <<"\n\nBEFORE:  node:  "<< curNode <<"\ttranspo: "<< transpos.size()
+		<<"\tbuckets: "<< transpos.bucket_count()
+		<<"\tmove: "<< curNode.board.count() -2
+		<<endl << endl;
 		
 		curNode = search_root(curNode, alpha);
 		
-		cerr <<"\n\nafter: "<< curNode <<"\ttranspo: "<< transpos.size()
+		cerr <<"\n\nAFTER:  node: "<< curNode <<"\ttranspo: "<< transpos.size()
 		<<"\tbuckets: "<< transpos.bucket_count()
-		<<endl << endl <<endl;
+		<<"\tmove: "<< curNode.board.count() -2
+		<<endl << endl;
 		
 		cout << "\n\n";
 		draw_board(curNode);
@@ -1032,12 +958,15 @@ bool play( Node &curNode )
 		cout << "I MOVE TO:  (" << GETY(curNode.myIdx)
 		<< " " << GETX(curNode.myIdx) << ")\n" << endl;
 		
-		if(evaluate_node(curNode) == MININT)
+		if(evaluate_node(curNode) <= MININT)
 			return false;
 		
 		
 		if( !take_move(curNode, alpha))
 			return true;
+		
+		cout << "YOU MOVE TO:  (" << GETY(curNode.opIdx)
+		<< " " << GETX(curNode.opIdx) << ")\n" << endl;
 		
 		cout << "\n\n";
 		draw_board(curNode);
@@ -1054,12 +983,10 @@ int main(int argc, char *argv[])
 	 * $ isola PLAYER TIME_LIMIT
 	 *
 	 *	Where PLAYER is [1 or 2] representing the player this instance is
+	 *  and TIME_LIMIT is the maximum allotted time
 	 *
 	 */
 	
-	
-	// only needed for dense hashmap
-	//	transpos.set_empty_key(Node());
 	
 	char playerNum;
 	//	string filename;
@@ -1068,16 +995,6 @@ int main(int argc, char *argv[])
 		assert(argc >= 3);
 		playerNum = argv[1][0] - '0';
 		maxSecs = atoi(argv[2]);
-		//		makemove = argv[2][0];
-		
-		//		filename = argv[2];
-		//
-		//		string read;
-		//		cout << "do you want to read from file (y/n):  ";
-		//		getline(cin, read);
-		//
-		//		if (read == "y")
-		//			read_table(filename);
 		
 	}
 	catch (int e)
@@ -1140,7 +1057,6 @@ int main(int argc, char *argv[])
 	
 	
 	Node initNode (board, myIdx, opIdx);
-	//	cerr << initNode << endl;
 	moves.push_back(initNode);
 	
 	string makeMove;
@@ -1153,7 +1069,6 @@ int main(int argc, char *argv[])
 		make_move(initNode, (playerNum == 1) ? MY : OP);
 	}
 	
-	//	cerr << connect_comp(initNode, opWithMe, MY) << " " << opWithMe << endl;
 	
 	int alpha = MININT;
 	if(playerNum == 2)
@@ -1172,9 +1087,9 @@ int main(int argc, char *argv[])
 	if ( win )
 		cout << "!!!!!!!    I win    !!!!!!!!!" << endl;
 	else
-		cout << ":( :(  You win  :( :(" << endl;
+		cout << "(nil nil)\n:( :(  You win  :( :(" << endl;
 	
-	//	serialize_table(filename);
+	
 	// completed sucessfully
 	return 0;
 }
